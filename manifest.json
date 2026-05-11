@@ -2,7 +2,7 @@
     "name": "KOOJI Hotpot POS",
     "short_name": "KOOJI Hotpot",
     "description": "Hotpot Point of Sale System",
-    "start_url": "/kooji-hotpot-pos/hotpot-pos.html",
+    "start_url": "/kooji-hotpot-pos/",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#dc2626",
