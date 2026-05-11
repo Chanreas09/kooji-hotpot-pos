@@ -8,324 +8,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="manifest" href="manifest.json">
 <script>
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
-    }
-</script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-    body { font-family: 'Inter', sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
-    .scrollbar-hide::-webkit-scrollbar { display: none; }
-    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: #f1f1f1; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
-    .table-btn { transition: all 0.2s; }
-    .table-btn:active { transform: scale(0.95); }
-    .fade-in { animation: fadeIn 0.3s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .slide-in { animation: slideIn 0.3s ease-out; }
-    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
-</style>
-</head>
-<body class="bg-gray-100 text-gray-800 h-screen overflow-hidden flex flex-col">
-
-<!-- HEADER -->
-<header class="bg-red-700 text-white shadow-lg z-20 px-4 py-2 flex justify-between items-center shrink-0">
-    <div class="flex items-center gap-3">
-        <div class="w-9 h-9 bg-white rounded-full flex items-center justify-center text-red-700 font-bold text-lg">🍲</div>
-        <div>
-            <h1 class="font-bold text-lg tracking-tight">KOOJI Hotpot</h1>
-            <p class="text-xs text-red-200" id="current-time">--</p>
-        </div>
-    </div>
-    <div class="flex items-center gap-2 flex-wrap">
-        <span id="bluetooth-status" class="text-xs bg-red-500 px-2 py-1 rounded-full">🔵 Printer Off</span>
-        <button onclick="connectBluetooth()" class="text-xs bg-white text-red-700 px-3 py-1 rounded-full font-medium hover:bg-red-50">🔗 Connect BT</button>
-        <button onclick="showLoginModal()" class="text-xs bg-white text-red-700 px-3 py-1 rounded-full font-medium hover:bg-red-50" id="login-btn">🔐 Login</button>
-        <button onclick="logout()" class="text-xs bg-red-900 text-white px-3 py-1 rounded-full font-medium hover:bg-red-800 hidden" id="logout-btn">🚪 Logout</button>
-    </div>
-</header>
-
-<!-- MAIN LAYOUT -->
-<div class="flex flex-1 overflow-hidden">
-    
-    <!-- SIDEBAR -->
-    <nav class="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-4 gap-4 z-10 shrink-0">
-        <button onclick="switchView('pos')" id="nav-pos" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-lg bg-red-50 text-red-600 w-14">
-            <span class="text-xl">🍲</span><span class="text-[9px] font-medium">Tables</span>
-        </button>
-        <button onclick="switchView('kitchen')" id="nav-kitchen" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-lg text-gray-500 w-14">
-            <span class="text-xl">👨‍🍳</span><span class="text-[9px] font-medium">Kitchen</span>
-        </button>
-        <button onclick="switchView('admin')" id="nav-admin" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-lg text-gray-500 w-14">
-            <span class="text-xl">⚙️</span><span class="text-[9px] font-medium">Admin</span>
-        </button>
-        <button onclick="switchView('reports')" id="nav-reports" class="nav-btn flex flex-col items-center gap-1 p-2 rounded-lg text-gray-500 w-14">
-            <span class="text-xl">📊</span><span class="text-[9px] font-medium">Report</span>
-        </button>
-    </nav>
-
-    <!-- CONTENT AREA -->
-    <main class="flex-1 relative overflow-hidden bg-gray-50">
-
-<!-- ========== TABLE GRID VIEW ========== -->
-<div id="view-pos" class="view-section absolute inset-0 flex fade-in">
-    <div class="flex-1 flex flex-col h-full">
-        <div class="grid grid-cols-3 gap-2 p-2 bg-white border-b shrink-0">
-            <div class="bg-green-50 p-2 rounded-lg text-center border border-green-100">
-                <p class="text-[10px] text-green-600 font-semibold uppercase">Today</p>
-                <p class="text-lg font-bold" id="stat-revenue">៛0</p>
-            </div>
-            <div class="bg-blue-50 p-2 rounded-lg text-center border border-blue-100">
-                <p class="text-[10px] text-blue-600 font-semibold uppercase">Orders</p>
-                <p class="text-lg font-bold" id="stat-orders">0</p>
-            </div>
-            <div class="bg-amber-50 p-2 rounded-lg text-center border border-amber-100">
-                <p class="text-[10px] text-amber-600 font-semibold uppercase">Avg</p>
-                <p class="text-lg font-bold" id="stat-avg">៛0</p>
-            </div>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4">
-            <h2 class="font-bold text-lg mb-3 text-gray-700">🍲 Tables</h2>
-            <div class="flex gap-3 mb-3 text-xs">
-                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-gray-200"></span> Free</span>
-                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-green-500"></span> Occupied</span>
-                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-red-400"></span> Clean</span>
-            </div>
-            <div class="grid grid-cols-3 gap-3 max-w-md mx-auto" id="table-grid"></div>
-        </div>
-    </div>
-    
-    <!-- Order Panel -->
-    <div class="w-96 bg-white border-l border-gray-200 flex flex-col shrink-0">
-        <div class="p-3 border-b bg-gray-50">
-            <div class="flex justify-between items-center">
-                <h2 class="font-bold text-lg" id="panel-table-title">Select a Table</h2>
-                <button onclick="clearTable()" class="text-xs text-red-500 font-medium">Clear</button>
-            </div>
-            <p class="text-xs text-gray-500" id="panel-persons-count">0 persons</p>
-        </div>
-        <div class="flex-1 overflow-y-auto p-3 space-y-2" id="panel-persons">
-            <p class="text-gray-400 text-center mt-8">Select a table to start</p>
-        </div>
-        <div class="p-3 bg-gray-50 border-t space-y-2 shrink-0">
-            <button onclick="addPerson()" class="w-full bg-red-100 text-red-700 py-2 rounded-lg font-medium text-sm hover:bg-red-200" id="btn-add-person" disabled>
-                ➕ Add Person (8,000៛)
-            </button>
-            <div class="border-t pt-2">
-                <p class="text-xs font-medium text-gray-600 mb-1">🥤 Add Drinks</p>
-                <div class="flex gap-1 flex-wrap" id="drinks-container"></div>
-            </div>
-            <div class="border-t pt-2 space-y-1">
-                <div class="flex justify-between text-sm"><span>Persons</span><span id="panel-persons-total">៛0</span></div>
-                <div class="flex justify-between text-sm"><span>Extras</span><span id="panel-extras-total">៛0</span></div>
-                <div class="flex justify-between text-sm">
-                    <span>Discount</span>
-                    <select id="discount-select" onchange="updateTotals()" class="text-xs border rounded px-1 py-0.5">
-                        <option value="0">None</option><option value="5">5%</option><option value="10">10%</option>
-                        <option value="25">25%</option><option value="50">50%</option><option value="100">🎁 Free</option>
-                    </select>
-                    <span class="text-red-500 font-medium" id="panel-discount">៛0</span>
-                </div>
-                <div class="flex justify-between font-bold text-xl pt-1 border-t">
-                    <span>TOTAL</span><span id="panel-total">៛0</span>
-                </div>
-            </div>
-            <div class="relative">
-                <input type="text" id="customer-input" placeholder="👤 Customer (default: Regular)" 
-                       class="w-full text-xs border rounded px-2 py-1.5" onfocus="showCustomerDropdown()" oninput="filterCustomerDropdown()" autocomplete="off">
-                <div id="customer-dropdown" class="absolute bottom-full left-0 right-0 bg-white border rounded-lg mb-1 shadow-lg z-50 hidden max-h-36 overflow-y-auto text-xs"></div>
-            </div>
-            <button onclick="processPayment()" class="w-full bg-red-600 text-white font-bold py-3 rounded-lg shadow-lg hover:bg-red-700 active:scale-95 transition">
-                💳 PAY
-            </button>
-            <button onclick="printKitchenTicket()" class="w-full bg-gray-700 text-white py-2 rounded-lg text-sm hover:bg-gray-800">
-                🖨️ Print Kitchen Only
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- ========== KITCHEN VIEW ========== -->
-<div id="view-kitchen" class="view-section absolute inset-0 bg-gray-100 hidden flex-col p-4 overflow-y-auto">
-    <h2 class="text-xl font-bold mb-4">👨‍🍳 Kitchen Display</h2>
-    <div class="grid grid-cols-3 gap-4 h-full">
-        <div class="bg-white rounded-xl shadow border flex flex-col">
-            <div class="p-2 bg-yellow-50 rounded-t-xl flex justify-between items-center">
-                <h3 class="font-bold text-yellow-800 text-sm">⏳ Pending (<span id="count-pending">0</span>)</h3>
-                <button onclick="startAllPrep()" class="text-xs bg-yellow-600 text-white px-2 py-1 rounded hidden" id="btn-start-all">▶️ All</button>
-            </div>
-            <div class="p-2 flex-1 overflow-y-auto space-y-2" id="kitchen-pending"></div>
-        </div>
-        <div class="bg-white rounded-xl shadow border flex flex-col">
-            <div class="p-2 bg-blue-50 rounded-t-xl flex justify-between items-center">
-                <h3 class="font-bold text-blue-800 text-sm">👨‍🍳 Preparing (<span id="count-preparing">0</span>)</h3>
-                <button onclick="readyAll()" class="text-xs bg-blue-600 text-white px-2 py-1 rounded hidden" id="btn-ready-all">✅ All</button>
-            </div>
-            <div class="p-2 flex-1 overflow-y-auto space-y-2" id="kitchen-preparing"></div>
-        </div>
-        <div class="bg-white rounded-xl shadow border flex flex-col">
-            <div class="p-2 bg-green-50 rounded-t-xl flex justify-between items-center">
-                <h3 class="font-bold text-green-800 text-sm">✅ Ready (<span id="count-ready">0</span>)</h3>
-                <button onclick="completeAll()" class="text-xs bg-green-600 text-white px-2 py-1 rounded hidden" id="btn-finish-all">🏁 All</button>
-            </div>
-            <div class="p-2 flex-1 overflow-y-auto space-y-2" id="kitchen-ready"></div>
-        </div>
-    </div>
-</div>
-
-<!-- ========== ADMIN VIEW ========== -->
-<div id="view-admin" class="view-section absolute inset-0 bg-gray-50 hidden overflow-y-auto p-6">
-    <h2 class="text-2xl font-bold mb-6">⚙️ Admin Panel</h2>
-    
-    <!-- Quick Actions -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <button onclick="openNoodleManager()" class="p-3 bg-amber-50 text-amber-700 rounded-xl border border-amber-200 hover:bg-amber-100 font-bold text-sm">🍜 Noodles</button>
-        <button onclick="openDrinkManager()" class="p-3 bg-blue-50 text-blue-700 rounded-xl border border-blue-200 hover:bg-blue-100 font-bold text-sm">🥤 Drinks</button>
-        <button onclick="openAddCustomerModal()" class="p-3 bg-teal-50 text-teal-700 rounded-xl border border-teal-200 hover:bg-teal-100 font-bold text-sm">👤 Customer</button>
-        <button onclick="openStaffModal()" class="p-3 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-200 hover:bg-indigo-100 font-bold text-sm">👥 Staff</button>
-        <button onclick="openChangePinModal()" class="p-3 bg-red-50 text-red-700 rounded-xl border border-red-200 hover:bg-red-100 font-bold text-sm">🔑 PIN</button>
-        <button onclick="openExpenseModal()" class="p-3 bg-gray-50 text-gray-700 rounded-xl border border-gray-200 hover:bg-gray-100 font-bold text-sm">💸 Expense</button>
-        <button onclick="backupData()" class="p-3 bg-green-50 text-green-700 rounded-xl border border-green-200 hover:bg-green-100 font-bold text-sm">💾 Backup</button>
-        <button onclick="switchView('reports')" class="p-3 bg-purple-50 text-purple-700 rounded-xl border border-purple-200 hover:bg-purple-100 font-bold text-sm">📊 Reports</button>
-    </div>
-    
-    <!-- Printer Settings -->
-    <div class="bg-white p-4 rounded-xl shadow border mb-4">
-        <h3 class="font-bold mb-3">🖨️ Bluetooth Printers</h3>
-        <div class="grid grid-cols-2 gap-4">
-            <div><p class="text-sm font-medium">Receipt Printer</p><select id="receipt-printer-select" class="w-full border rounded px-2 py-1 text-sm"><option>Not connected</option></select></div>
-            <div><p class="text-sm font-medium">Kitchen Printer</p><select id="kitchen-printer-select" class="w-full border rounded px-2 py-1 text-sm"><option>Not connected</option></select></div>
-        </div>
-        <button onclick="connectBluetooth()" class="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">🔗 Scan Bluetooth</button>
-    </div>
-
-    <!-- Noodle Manager -->
-    <div class="bg-white p-4 rounded-xl shadow border mb-4" id="noodle-manager">
-        <div class="flex justify-between items-center mb-3">
-            <h3 class="font-bold">🍜 Noodle Types</h3>
-            <button onclick="addNoodleRow()" class="text-sm bg-amber-600 text-white px-3 py-1 rounded">+ Add</button>
-        </div>
-        <div id="noodle-list" class="space-y-2"></div>
-        <button onclick="saveNoodles()" class="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg text-sm">💾 Save Noodles</button>
-    </div>
-    
-    <!-- Drink Manager -->
-    <div class="bg-white p-4 rounded-xl shadow border mb-4" id="drink-manager" style="display:none;">
-        <div class="flex justify-between items-center mb-3">
-            <h3 class="font-bold">🥤 Drinks</h3>
-            <button onclick="addDrinkRow()" class="text-sm bg-blue-600 text-white px-3 py-1 rounded">+ Add</button>
-        </div>
-        <div id="drink-list" class="space-y-2"></div>
-        <button onclick="saveDrinks()" class="mt-3 bg-green-600 text-white px-4 py-2 rounded-lg text-sm">💾 Save Drinks</button>
-    </div>
-</div>
-
-<!-- ========== REPORTS VIEW ========== -->
-<div id="view-reports" class="view-section absolute inset-0 bg-gray-50 hidden overflow-y-auto p-6">
-    <h2 class="text-2xl font-bold mb-6">📊 Reports & Analytics</h2>
-    <div class="grid grid-cols-4 gap-4 mb-6">
-        <div class="bg-white p-4 rounded-xl shadow border text-center"><p class="text-xs text-gray-500">Revenue</p><p class="text-xl font-bold text-green-700" id="rpt-revenue">៛0</p></div>
-        <div class="bg-white p-4 rounded-xl shadow border text-center"><p class="text-xs text-gray-500">Orders</p><p class="text-xl font-bold text-blue-700" id="rpt-orders">0</p></div>
-        <div class="bg-white p-4 rounded-xl shadow border text-center"><p class="text-xs text-gray-500">Avg/Table</p><p class="text-xl font-bold text-purple-700" id="rpt-avg">៛0</p></div>
-        <div class="bg-white p-4 rounded-xl shadow border text-center"><p class="text-xs text-gray-500">Tables Today</p><p class="text-lg font-bold text-amber-700" id="rpt-tables">0</p></div>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-        <div class="bg-white p-4 rounded-xl shadow border"><h3 class="font-bold mb-2">📈 Daily Revenue</h3><div class="h-64"><canvas id="revenue-chart"></canvas></div></div>
-        <div class="bg-white p-4 rounded-xl shadow border"><h3 class="font-bold mb-2">🔥 Top Noodles</h3><div class="h-64"><canvas id="noodle-chart"></canvas></div></div>
-    </div>
-</div>
-
-</main></div>
-
-<!-- ========== MODALS ========== -->
-<!-- Login Modal -->
-<div id="login-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-2xl shadow-2xl w-80 p-6 slide-in">
-        <h3 class="text-xl font-bold text-center mb-4">🔐 Staff Login</h3>
-        <input type="password" id="login-pin-input" maxlength="4" inputmode="numeric" class="w-full border-2 rounded-xl text-center text-2xl font-bold tracking-widest py-3 mb-3" placeholder="****" autofocus>
-        <div class="grid grid-cols-3 gap-2">
-            <button onclick="addPinDigit('1')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">1</button>
-            <button onclick="addPinDigit('2')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">2</button>
-            <button onclick="addPinDigit('3')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">3</button>
-            <button onclick="addPinDigit('4')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">4</button>
-            <button onclick="addPinDigit('5')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">5</button>
-            <button onclick="addPinDigit('6')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">6</button>
-            <button onclick="addPinDigit('7')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">7</button>
-            <button onclick="addPinDigit('8')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">8</button>
-            <button onclick="addPinDigit('9')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">9</button>
-            <button onclick="clearPinInput()" class="p-3 bg-red-100 text-red-700 rounded-xl font-bold">C</button>
-            <button onclick="addPinDigit('0')" class="p-3 bg-gray-100 rounded-xl text-xl font-bold">0</button>
-            <button onclick="submitLogin()" class="p-3 bg-red-600 text-white rounded-xl text-xl font-bold">→</button>
-        </div>
-        <button onclick="hideLoginModal()" class="mt-3 w-full text-gray-500 text-sm">Cancel</button>
-    </div>
-</div>
-
-<!-- Expense Modal -->
-<div id="expense-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-2xl shadow-2xl w-96 p-6 slide-in">
-        <h3 class="text-xl font-bold mb-4">💸 Add Expense</h3>
-        <input type="text" id="expense-desc" placeholder="Description" class="w-full border rounded-lg px-3 py-2 mb-2">
-        <input type="number" id="expense-amount" placeholder="Amount (៛)" class="w-full border rounded-lg px-3 py-2 mb-3">
-        <div class="flex gap-2 mb-3">
-            <button onclick="quickExpense('Gas',15000)" class="flex-1 bg-gray-100 rounded-lg py-2 text-xs">⛽ Gas 15K</button>
-            <button onclick="quickExpense('Vegetables',20000)" class="flex-1 bg-gray-100 rounded-lg py-2 text-xs">🥬 Veg 20K</button>
-            <button onclick="quickExpense('Meat',50000)" class="flex-1 bg-gray-100 rounded-lg py-2 text-xs">🥩 Meat 50K</button>
-        </div>
-        <div class="flex gap-2">
-            <button onclick="closeExpenseModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
-            <button onclick="addExpense()" class="flex-1 py-2 bg-red-600 text-white rounded-lg font-bold">➕ Add</button>
-        </div>
-    </div>
-</div>
-
-<!-- Customer Modal -->
-<div id="add-customer-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-2xl shadow-2xl w-80 p-6 slide-in">
-        <h3 class="text-xl font-bold mb-4">👤 Add Customer</h3>
-        <input type="text" id="new-customer-name" placeholder="Name *" class="w-full border rounded-lg px-3 py-2 mb-2">
-        <input type="text" id="new-customer-phone" placeholder="Phone (optional)" class="w-full border rounded-lg px-3 py-2 mb-2">
-        <input type="number" id="new-customer-visits" placeholder="Visits" value="0" class="w-full border rounded-lg px-3 py-2 mb-3">
-        <div class="flex gap-2">
-            <button onclick="closeAddCustomerModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
-            <button onclick="saveNewCustomer()" class="flex-1 py-2 bg-teal-600 text-white rounded-lg font-bold">💾 Save</button>
-        </div>
-    </div>
-</div>
-
-<!-- Staff Modal -->
-<div id="staff-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-2xl shadow-2xl w-96 p-6 slide-in max-h-[80vh] overflow-y-auto">
-        <h3 class="text-xl font-bold mb-4">👥 Staff Management</h3>
-        <div class="mb-4 p-3 bg-gray-50 rounded-lg">
-            <h4 class="font-medium mb-2 text-sm">➕ Add Staff</h4>
-            <input type="text" id="new-staff-name" placeholder="Name" class="w-full border rounded px-2 py-1 mb-2 text-sm">
-            <input type="text" id="new-staff-pin" placeholder="4-digit PIN" maxlength="4" class="w-full border rounded px-2 py-1 mb-2 text-sm">
-            <select id="new-staff-role" class="w-full border rounded px-2 py-1 text-sm"><option value="cashier">Cashier</option><option value="admin">Admin</option></select>
-            <button onclick="addStaffMember()" class="mt-2 w-full bg-red-600 text-white py-1 rounded text-sm">Add Staff</button>
-        </div>
-        <h4 class="font-medium mb-2 text-sm">📋 Current Staff</h4>
-        <div id="staff-table-body" class="text-sm"></div>
-        <button onclick="closeStaffModal()" class="mt-3 w-full py-2 bg-gray-200 rounded-lg text-sm">Close</button>
-    </div>
-</div>
-
-<!-- Change PIN Modal -->
-<div id="change-pin-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-    <div class="bg-white rounded-2xl shadow-2xl w-80 p-6 slide-in">
-        <h3 class="text-xl font-bold mb-4">🔑 Change PIN</h3>
-        <select id="change-pin-staff" class="w-full border rounded-lg px-3 py-2 mb-2"><option value="">— Choose staff —</option></select>
-        <input type="number" id="change-pin-new" min="1000" max="9999" class="w-full border rounded-lg text-center text-xl font-bold py-2 mb-2" placeholder="****" oninput="if(this.value.length>4)this.value=this.value.slice(0,4)">
-        <div class="flex gap-2">
-            <button onclick="closeChangePinModal()" class="flex-1 py-2 border rounded-lg">Cancel</button>
-            <button onclick="saveNewPin()" class="flex-1 py-2 bg-red-600 text-white rounded-lg font-bold">💾 Save</button>
-        </div>
-    </div>
-</div>
-
-<script>
 // ============================================
 // DATA & STATE
 // ============================================
@@ -370,7 +52,7 @@ function selectTable(num) {
     if (tables[num].status === 'cleaning') { if(confirm('Mark clean?')) { tables[num].status = 'available'; renderTableGrid(); } return; }
     currentTable = num;
     if (tables[num].status === 'available') { tables[num].status = 'occupied'; tables[num].orderTime = new Date(); }
-    document.getElementById('panel-table-title').innerText = `🍲 Table ${num}`;
+    document.getElementById('panel-table-title').innerText = '🍲 Table ' + num;
     document.getElementById('btn-add-person').disabled = false;
     renderOrderPanel(); renderTableGrid();
 }
@@ -409,15 +91,15 @@ function renderOrderPanel() {
     let h = '';
     t.persons.forEach((p,i) => {
         h += `<div class="bg-white border rounded-lg p-2 mb-2">
-            <div class="flex justify-between items-center mb-1"><span class="font-bold text-sm">👤 Person ${i+1}</span><button onclick="removePerson(${i})" class="text-red-400 text-xs">✕</button></div>
+            <div class="flex justify-between items-center mb-1"><span class="font-bold text-sm">Person ${i+1}</span><button onclick="removePerson(${i})" class="text-red-400 text-xs">✕</button></div>
             <select onchange="updatePersonNoodle(${i}, this.value)" class="w-full text-xs border rounded px-2 py-1 mb-1">${noodles.map(n => `<option value="${n.name}" ${p.noodle===n.name?'selected':''}>🍜 ${n.name}</option>`).join('')}</select>
-            <input type="text" placeholder="📝 Note (spicy, less broth...)" value="${p.note}" onchange="updatePersonNote(${i}, this.value)" class="w-full text-xs border rounded px-2 py-1 mb-1">
-            <label class="flex items-center gap-1 text-xs cursor-pointer"><input type="checkbox" ${p.extraNoodle?'checked':''} onchange="toggleExtraNoodle(${i})"> Extra Noodle (+2,000៛)</label>
+            <input type="text" placeholder="Note (spicy, less broth...)" value="${p.note}" onchange="updatePersonNote(${i}, this.value)" class="w-full text-xs border rounded px-2 py-1 mb-1">
+            <label class="flex items-center gap-1 text-xs cursor-pointer"><input type="checkbox" ${p.extraNoodle?'checked':''} onchange="toggleExtraNoodle(${i})"> Extra Noodle (+2,000R)</label>
         </div>`;
     });
-    h += `<div class="border-t pt-2 mt-2"><p class="text-xs font-medium mb-1">🥤 Drinks & Extras:</p>`;
+    h += `<div class="border-t pt-2 mt-2"><p class="text-xs font-medium mb-1">Drinks & Extras:</p>`;
     t.extras.forEach((e,i) => {
-        h += `<div class="flex justify-between items-center text-xs bg-gray-50 rounded px-2 py-1 mb-1"><span>${e.name} x${e.qty||1}</span><div class="flex items-center gap-2"><span class="font-medium">៛${(e.price*(e.qty||1)).toLocaleString()}</span><button onclick="removeExtra(${i})" class="text-red-400">✕</button></div></div>`;
+        h += `<div class="flex justify-between items-center text-xs bg-gray-50 rounded px-2 py-1 mb-1"><span>${e.name} x${e.qty||1}</span><div class="flex items-center gap-2"><span class="font-medium">${(e.price*(e.qty||1)).toLocaleString()}R</span><button onclick="removeExtra(${i})" class="text-red-400">✕</button></div></div>`;
     });
     h += `</div>`;
     document.getElementById('panel-persons').innerHTML = h;
@@ -426,12 +108,12 @@ function renderOrderPanel() {
 
 function renderDrinkButtons() {
     document.getElementById('drinks-container').innerHTML = drinks.map(d => 
-        `<button onclick="addExtra('${d.id}')" class="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full border border-blue-200 hover:bg-blue-100">${d.name} +${d.price.toLocaleString()}៛</button>`
+        `<button onclick="addExtra('${d.id}')" class="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full border border-blue-200 hover:bg-blue-100">${d.name} +${d.price.toLocaleString()}R</button>`
     ).join('');
 }
 
 function updateTotals() {
-    if(!currentTable) { document.getElementById('panel-total').innerText = '៛0'; return; }
+    if(!currentTable) { document.getElementById('panel-total').innerText = '0R'; return; }
     const t = tables[currentTable];
     let pTotal = t.persons.length * BASE_PRICE;
     t.persons.forEach(p => { if(p.extraNoodle) pTotal += EXTRA_NOODLE_PRICE; });
@@ -441,10 +123,10 @@ function updateTotals() {
     const da = Math.round(sub * dp / 100);
     const total = sub - da;
     tables[currentTable].total = total;
-    document.getElementById('panel-persons-total').innerText = '៛'+pTotal.toLocaleString();
-    document.getElementById('panel-extras-total').innerText = '៛'+eTotal.toLocaleString();
-    document.getElementById('panel-discount').innerText = da>0 ? '-៛'+da.toLocaleString() : '៛0';
-    document.getElementById('panel-total').innerText = '៛'+total.toLocaleString();
+    document.getElementById('panel-persons-total').innerText = pTotal.toLocaleString()+'R';
+    document.getElementById('panel-extras-total').innerText = eTotal.toLocaleString()+'R';
+    document.getElementById('panel-discount').innerText = da>0 ? '-'+da.toLocaleString()+'R' : '0R';
+    document.getElementById('panel-total').innerText = total.toLocaleString()+'R';
 }
 
 // ============================================
@@ -457,7 +139,7 @@ function processPayment() {
     const ci = document.getElementById('customer-input');
     const cn = ci?.value.trim() || 'Regular Customer';
     t.customer = cn;
-    const pm = confirm('💵 Cash? OK=Cash, Cancel=Bank') ? 'cash' : 'bank';
+    const pm = confirm('Cash? OK=Cash, Cancel=Bank') ? 'cash' : 'bank';
     const order = { tableNum: currentTable, persons: [...t.persons], extras: [...t.extras], total: t.total, customer: cn, paymentMethod: pm, time: new Date() };
     orders.push(order); kitchenQueue.push({...order, status:'pending'});
     dailyStats.revenue += t.total; dailyStats.orders++;
@@ -471,14 +153,14 @@ function processPayment() {
     document.getElementById('customer-input').value = '';
     document.getElementById('discount-select').value = '0';
     updateStats(); renderOrderPanel(); renderTableGrid(); renderKitchen();
-    alert(`✅ Order complete!\nTable: ${order.tableNum}\nTotal: ${order.total.toLocaleString()}៛`);
+    alert('Order complete!\nTable: ' + order.tableNum + '\nTotal: ' + order.total.toLocaleString() + 'R');
 }
 
 function updateStats() {
-    document.getElementById('stat-revenue').innerText = '៛'+dailyStats.revenue.toLocaleString();
+    document.getElementById('stat-revenue').innerText = dailyStats.revenue.toLocaleString()+'R';
     document.getElementById('stat-orders').innerText = dailyStats.orders;
     const a = dailyStats.orders>0 ? Math.round(dailyStats.revenue/dailyStats.orders) : 0;
-    document.getElementById('stat-avg').innerText = '៛'+a.toLocaleString();
+    document.getElementById('stat-avg').innerText = a.toLocaleString()+'R';
 }
 
 function saveAllData() {
@@ -494,38 +176,35 @@ function saveAllData() {
 // BLUETOOTH PRINTING
 // ============================================
 const PRINTER_SERVICES = [
-    '000018f0-0000-1000-8000-00805f9b34fb',  // Common thermal
-    '00001101-0000-1000-8000-00805f9b34fb',  // SPP (Serial Port Profile)
-    '0000ffe0-0000-1000-8000-00805f9b34fb',  // Chinese thermal printers
+    '000018f0-0000-1000-8000-00805f9b34fb',
+    '00001101-0000-1000-8000-00805f9b34fb',
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
 ];
 
 let btDevice = null;
 let btCharacteristic = null;
+let savedPrinterId = localStorage.getItem('hotpotPrinterId') || null;
 
 async function connectBluetooth() {
     try {
         const statusEl = document.getElementById('bluetooth-status');
+        statusEl.innerHTML = 'Scanning...';
+        statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
         
-        // Show scanning status
-        if (statusEl) {
-            statusEl.innerHTML = '🔵 Scanning...';
-            statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
-        }
-        
-        // Request Bluetooth device
         const device = await navigator.bluetooth.requestDevice({ 
             acceptAllDevices: true, 
             optionalServices: PRINTER_SERVICES 
         });
         
-        // Connect to GATT server
         const server = await device.gatt.connect();
         btDevice = device;
         
-        // Try to find writable characteristic
-        let found = false;
+        // SAVE printer info
+        savedPrinterId = device.id;
+        localStorage.setItem('hotpotPrinterId', device.id);
+        localStorage.setItem('hotpotPrinterName', device.name);
         
-        // First try known printer service UUIDs
+        let found = false;
         for (const uuid of PRINTER_SERVICES) {
             try {
                 const service = await server.getPrimaryService(uuid);
@@ -534,17 +213,13 @@ async function connectBluetooth() {
                     if (char.properties.write || char.properties.writeWithoutResponse) {
                         btCharacteristic = char;
                         found = true;
-                        console.log('✅ Found printer characteristic:', uuid);
                         break;
                     }
                 }
                 if (found) break;
-            } catch(e) {
-                // Try next UUID
-            }
+            } catch(e) {}
         }
         
-        // Fallback: scan all services for writable characteristic
         if (!found) {
             const services = await server.getPrimaryServices();
             for (const svc of services) {
@@ -554,7 +229,6 @@ async function connectBluetooth() {
                         if (char.properties.write || char.properties.writeWithoutResponse) {
                             btCharacteristic = char;
                             found = true;
-                            console.log('✅ Found fallback characteristic:', svc.uuid);
                             break;
                         }
                     }
@@ -563,180 +237,366 @@ async function connectBluetooth() {
             }
         }
         
-        if (!found) {
-            throw new Error('No writable characteristic found');
-        }
+        if (!found) throw new Error('No writable characteristic found');
         
-        // Update status
-        if (statusEl) {
-            statusEl.innerHTML = '🟢 ' + device.name;
-            statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
-        }
+        statusEl.innerHTML = device.name;
+        statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
         
-        // Update printer selects
         const receiptSelect = document.getElementById('receipt-printer-select');
         const kitchenSelect = document.getElementById('kitchen-printer-select');
         if (receiptSelect) receiptSelect.innerHTML = `<option value="${device.name}">${device.name}</option>`;
         if (kitchenSelect) kitchenSelect.innerHTML = `<option value="${device.name}">${device.name}</option>`;
         
-        // Setup disconnect listener
         device.addEventListener('gattserverdisconnected', () => {
-            if (statusEl) {
-                statusEl.innerHTML = '🔴 Disconnected';
-                statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-            }
+            statusEl.innerHTML = 'Printer Off';
+            statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
             btDevice = null;
             btCharacteristic = null;
         });
         
-        alert('✅ Bluetooth printer connected!\n' + device.name);
+        alert('Bluetooth printer connected!\n' + device.name);
         
     } catch(e) {
-        console.error('Bluetooth error:', e);
+        console.error(e);
+        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
+        document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
         
-        const statusEl = document.getElementById('bluetooth-status');
-        if (statusEl) {
-            statusEl.innerHTML = '🔵 Printer Off';
-            statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-        }
-        
-        if (e.name === 'NotFoundError') {
-            alert('❌ No device selected. Please try again.');
-        } else if (e.name === 'SecurityError') {
-            alert('❌ Bluetooth permission denied.\nAllow Bluetooth access in your browser settings.');
-        } else if (e.name === 'NetworkError') {
-            alert('❌ Connection lost. Make sure printer is on and in range.');
-        } else {
-            alert('❌ Connection failed: ' + (e.message || 'Unknown error'));
-        }
+        if (e.name === 'NotFoundError') alert('No device selected.');
+        else if (e.name === 'SecurityError') alert('Bluetooth permission denied.');
+        else alert('Connection failed: ' + (e.message || 'Unknown error'));
     }
 }
 
-async function printReceipt(order) {
-    // Check connection
-    if (!btDevice || !btCharacteristic) { 
-        alert('⚠️ Connect Bluetooth printer first!\nClick "🔗 Connect BT" button.');
-        return; 
-    }
+// Auto-reconnect on page load
+async function autoReconnectPrinter() {
+    if (!savedPrinterId) return;
     
     try {
-        // Reconnect if needed
-        if (!btDevice.gatt.connected) {
-            document.getElementById('bluetooth-status').innerHTML = '🔵 Reconnecting...';
-            document.getElementById('bluetooth-status').className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
-            await btDevice.gatt.connect();
+        const statusEl = document.getElementById('bluetooth-status');
+        statusEl.innerHTML = 'Auto-connecting...';
+        statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
+        
+        const devices = await navigator.bluetooth.getDevices();
+        const savedDevice = devices.find(d => d.id === savedPrinterId);
+        
+        if (savedDevice) {
+            const server = await savedDevice.gatt.connect();
+            btDevice = savedDevice;
+            
+            let found = false;
+            for (const uuid of PRINTER_SERVICES) {
+                try {
+                    const service = await server.getPrimaryService(uuid);
+                    const chars = await service.getCharacteristics();
+                    for (const char of chars) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            btCharacteristic = char;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                } catch(e) {}
+            }
+            
+            if (!found) {
+                const services = await server.getPrimaryServices();
+                for (const svc of services) {
+                    const chars = await svc.getCharacteristics();
+                    for (const char of chars) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            btCharacteristic = char;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+            }
+            
+            if (found) {
+                const name = localStorage.getItem('hotpotPrinterName') || 'Printer';
+                statusEl.innerHTML = name;
+                statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
+                console.log('Auto-reconnected to printer:', name);
+                
+                const rs = document.getElementById('receipt-printer-select');
+                const ks = document.getElementById('kitchen-printer-select');
+                if (rs) rs.innerHTML = `<option>${name}</option>`;
+                if (ks) ks.innerHTML = `<option>${name}</option>`;
+                
+                savedDevice.addEventListener('gattserverdisconnected', () => {
+                    statusEl.innerHTML = 'Printer Off';
+                    statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
+                    btDevice = null;
+                    btCharacteristic = null;
+                });
+            }
         }
-        
-        // Build receipt text
-        const line = '------------------------------';
-        let txt = '\n';
-        txt += '     🍲 KOOJI Hotpot\n';
-        txt += '     Tel: 016 645 198\n';
-        txt += line + '\n';
-        txt += 'Table: ' + order.tableNum + '\n';
-        txt += 'Date: ' + new Date().toLocaleString() + '\n';
-        txt += line + '\n';
-        
-        // Persons
-        order.persons.forEach((p, i) => {
-            txt += '👤 P' + (i+1) + ': ' + p.noodle + '\n';
-            if (p.extraNoodle) txt += '   + Extra Noodle (2,000៛)\n';
-            if (p.note) txt += '   📝 ' + p.note + '\n';
-        });
-        
-        // Extras
-        if (order.extras.length > 0) {
-            txt += '--- Extras ---\n';
-            order.extras.forEach(e => {
-                txt += '  ' + e.name + ' x' + (e.qty||1) + ': ' + e.price.toLocaleString() + '៛\n';
-            });
-        }
-        
-        txt += line + '\n';
-        txt += 'TOTAL: ' + order.total.toLocaleString() + '៛\n';
-        if (order.customer) txt += 'Customer: ' + order.customer + '\n';
-        if (order.paymentMethod) {
-            txt += 'Payment: ' + (order.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Bank') + '\n';
-        }
-        txt += line + '\n';
-        txt += '    THANK YOU! 🍲\n';
-        txt += '\n\n\n';
-        
-        // Convert to bytes
-        const encoder = new TextEncoder();
-        const data = encoder.encode(txt);
-        
-        // Send in chunks (some printers limit packet size)
-        const CHUNK_SIZE = 256;
-        for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-            const chunk = data.slice(i, Math.min(i + CHUNK_SIZE, data.length));
+    } catch(e) {
+        console.log('Auto-reconnect failed — click Connect BT');
+        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
+        document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
+    }
+}
+
+async function sendToPrinter(text) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const CHUNK_SIZE = 512;
+    
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+        const chunk = data.slice(i, Math.min(i + CHUNK_SIZE, data.length));
+        try {
             if (btCharacteristic.properties.writeWithoutResponse) {
                 await btCharacteristic.writeValueWithoutResponse(chunk);
             } else {
                 await btCharacteristic.writeValue(chunk);
             }
-            // Small delay between chunks
-            if (i + CHUNK_SIZE < data.length) {
-                await new Promise(r => setTimeout(r, 30));
-            }
-        }
-        
-        // Paper cut command (ESC/POS standard)
-        try {
-            const cutCmd = new Uint8Array([0x1D, 0x56, 0x41]); // Full cut
-            if (btCharacteristic.properties.writeWithoutResponse) {
-                await btCharacteristic.writeValueWithoutResponse(cutCmd);
-            } else {
-                await btCharacteristic.writeValue(cutCmd);
-            }
         } catch(e) {
-            // Cut is optional — ignore if not supported
+            for (let j = 0; j < chunk.length; j += 64) {
+                const mini = chunk.slice(j, Math.min(j + 64, chunk.length));
+                if (btCharacteristic.properties.writeWithoutResponse) {
+                    await btCharacteristic.writeValueWithoutResponse(mini);
+                } else {
+                    await btCharacteristic.writeValue(mini);
+                }
+            }
+        }
+        if (i + CHUNK_SIZE < data.length) {
+            await new Promise(r => setTimeout(r, 15));
+        }
+    }
+}
+
+function sanitizeText(str) {
+    return str
+        .replace(/[R]/, 'R')
+        .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+        .replace(/[^\x00-\x7F\x0A\x0D]/g, '');
+}
+
+function padRight(str, len) {
+    str = String(str);
+    return str + ' '.repeat(Math.max(0, len - str.length));
+}
+
+function padLeft(str, len) {
+    str = String(str);
+    return ' '.repeat(Math.max(0, len - str.length)) + str;
+}
+
+function buildKitchenTicket(order) {
+    const WIDTH = 32;
+    const line = '='.repeat(WIDTH);
+    const dash = '-'.repeat(WIDTH);
+    
+    let txt = '\x1B\x40';
+    txt += '\x1B\x61\x01';
+    txt += '\x1B\x21\x10';
+    
+    txt += '\n' + line + '\n';
+    txt += '   KITCHEN ORDER\n';
+    txt += line + '\n';
+    
+    txt += '\x1B\x21\x00';
+    txt += '\x1B\x61\x00';
+    
+    txt += '\n';
+    txt += padRight('  TABLE: ' + order.tableNum, WIDTH/2);
+    txt += padLeft('TIME: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), WIDTH/2) + '\n';
+    txt += '  PERSONS: ' + order.persons.length + '\n';
+    txt += line + '\n\n';
+    
+    order.persons.forEach((p, i) => {
+        txt += '\x1B\x45\x01';
+        txt += '  PERSON ' + (i+1) + '\n';
+        txt += '\x1B\x45\x00';
+        txt += '    Noodle : ' + p.noodle + '\n';
+        if (p.extraNoodle) txt += '    Extra  : + Extra Noodle\n';
+        if (p.note) txt += '    Note   : ' + sanitizeText(p.note) + '\n';
+        txt += '\n';
+    });
+    
+    if (order.extras && order.extras.length > 0) {
+        txt += dash + '\n';
+        txt += '  EXTRAS\n';
+        txt += dash + '\n';
+        order.extras.forEach(e => {
+            txt += '    * ' + e.name + ' x' + (e.qty||1) + '\n';
+        });
+        txt += '\n';
+    }
+    
+    txt += '\x1B\x61\x01';
+    txt += '\x1B\x45\x01';
+    txt += line + '\n';
+    txt += '  PLEASE PREPARE ASAP\n';
+    txt += line + '\n';
+    txt += '\x1B\x45\x00';
+    
+    txt += '\n\n\n\n';
+    txt += '\x1D\x56\x41';
+    
+    return sanitizeText(txt);
+}
+
+function buildReceiptTicket(order) {
+    const WIDTH = 32;
+    const line = '='.repeat(WIDTH);
+    const dash = '-'.repeat(WIDTH);
+    const BASE_PRICE = 8000;
+    const EXTRA_NOODLE_PRICE = 2000;
+    
+    const today = new Date().toDateString();
+    let orderNum = parseInt(localStorage.getItem('hotpotOrderNum') || '0');
+    if (localStorage.getItem('hotpotOrderDate') !== today) {
+        orderNum = 1;
+        localStorage.setItem('hotpotOrderDate', today);
+    } else {
+        orderNum++;
+    }
+    localStorage.setItem('hotpotOrderNum', orderNum);
+    const orderId = String(orderNum).padStart(3, '0');
+    
+    let txt = '\x1B\x40';
+    txt += '\x1B\x61\x01';
+    
+    txt += '\x1B\x21\x10';
+    txt += '\n' + line + '\n';
+    txt += '   KOOJI: The Hotpot\n';
+    txt += line + '\n';
+    txt += '\x1B\x21\x00';
+    
+    txt += '  015 64 51 98\n';
+    txt += '  Chrey, Battambang, KH\n';
+    txt += line + '\n\n';
+    
+    txt += '\x1B\x61\x00';
+    txt += '- Table No  : ' + order.tableNum + '\n';
+    txt += '- Date : ' + new Date().toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) + '\n';
+    txt += '- Order : ' + orderId + '\n';
+    txt += '- Time      : ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '\n';
+    txt += '- Payment : ' + (order.paymentMethod === 'cash' ? 'Cash' : 'Bank') + '\n';
+    txt += '- Persons   : ' + order.persons.length + '\n';
+    if (order.customer) txt += '- Customer  : ' + order.customer + '\n';
+    txt += line + '\n\n';
+    
+    txt += '\x1B\x61\x01';
+    txt += '\x1B\x45\x01';
+    txt += '  ORDER DETAILS\n';
+    txt += '\x1B\x45\x00';
+    txt += dash + '\n\n';
+    
+    txt += '\x1B\x61\x00';
+    order.persons.forEach((p, i) => {
+        txt += '\x1B\x45\x01';
+        txt += '  Person ' + (i+1) + '\n';
+        txt += '\x1B\x45\x00';
+        txt += '    Noodle  : ' + p.noodle + '\n';
+        txt += '    Base    : ' + padLeft(BASE_PRICE.toLocaleString() + 'R', 12) + '\n';
+        if (p.extraNoodle) {
+            txt += '    Extra   : ' + padLeft(EXTRA_NOODLE_PRICE.toLocaleString() + 'R', 12) + '\n';
+        }
+        if (p.note) txt += '    Note    : ' + sanitizeText(p.note) + '\n';
+        txt += dash + '\n';
+    });
+    
+    if (order.extras && order.extras.length > 0) {
+        txt += '\x1B\x61\x01';
+        txt += '  Extras\n';
+        txt += '\x1B\x61\x00';
+        txt += dash + '\n';
+        order.extras.forEach(e => {
+            const extTotal = e.price * (e.qty || 1);
+            txt += '    ' + e.name + ' x ' + (e.qty||1);
+            txt += padLeft(extTotal.toLocaleString() + 'R', WIDTH - 6 - e.name.length - 4) + '\n';
+        });
+        txt += dash + '\n';
+    }
+    
+    let personTotal = order.persons.length * BASE_PRICE;
+    order.persons.forEach(p => { if (p.extraNoodle) personTotal += EXTRA_NOODLE_PRICE; });
+    let extrasTotal = order.extras.reduce((s, e) => s + (e.price * (e.qty || 1)), 0);
+    
+    txt += '\n';
+    txt += '\x1B\x61\x00';
+    txt += '  SUBTOTAL' + padLeft(personTotal.toLocaleString() + 'R', WIDTH - 10) + '\n';
+    txt += '  EXTRAS' + padLeft(extrasTotal.toLocaleString() + 'R', WIDTH - 8) + '\n';
+    txt += '\n';
+    
+    txt += '\x1B\x45\x01';
+    txt += '\x1B\x21\x10';
+    txt += '  TOTAL' + padLeft(order.total.toLocaleString() + 'R', WIDTH - 7) + '\n';
+    txt += '\x1B\x21\x00';
+    txt += '\x1B\x45\x00';
+    
+    txt += '\x1B\x61\x01';
+    txt += line + '\n';
+    txt += '     THANK YOU!\n';
+    txt += '  Please visit again :)\n';
+    txt += line + '\n';
+    txt += '  WiFi: koojiwifi#!\n';
+    
+    txt += '\n\n\n\n';
+    txt += '\x1D\x56\x41';
+    
+    return sanitizeText(txt);
+}
+
+async function printReceipt(order) {
+    if (!btDevice || !btCharacteristic) { 
+        alert('Connect Bluetooth printer first!');
+        return; 
+    }
+    
+    try {
+        if (!btDevice.gatt.connected) {
+            document.getElementById('bluetooth-status').innerHTML = 'Reconnecting...';
+            document.getElementById('bluetooth-status').className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
+            await btDevice.gatt.connect();
         }
         
-        alert('✅ Receipt printed!');
+        const kitchenTicket = buildKitchenTicket(order);
+        await sendToPrinter(kitchenTicket);
+        await new Promise(r => setTimeout(r, 150));
+        
+        const receiptTicket = buildReceiptTicket(order);
+        await sendToPrinter(receiptTicket);
+        
+        document.getElementById('bluetooth-status').innerHTML = btDevice.name;
+        document.getElementById('bluetooth-status').className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
+        
+        alert('Kitchen ticket + Receipt printed!');
         
     } catch(e) {
         console.error('Print error:', e);
-        
-        // Reset connection on error
         btDevice = null;
         btCharacteristic = null;
-        document.getElementById('bluetooth-status').innerHTML = '🔵 Printer Off';
+        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
         document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-        
-        alert('❌ Print failed.\nReconnect printer and try again.\n\nError: ' + (e.message || 'Unknown'));
+        alert('Print failed. Reconnect printer and try again.');
     }
 }
 
 function printKitchenTicket() {
-    if (!currentTable) {
-        alert('⚠️ Select a table first');
-        return;
-    }
+    if (!currentTable) { alert('Select a table first'); return; }
     const t = tables[currentTable];
-    printReceipt({ 
-        tableNum: currentTable, 
-        persons: t.persons, 
-        extras: t.extras, 
-        total: t.total, 
-        customer: t.customer || 'Regular',
-        paymentMethod: 'cash'
-    });
-}
-
-// Optional: Add test print function
-function testBluetoothPrint() {
-    const testOrder = {
-        tableNum: 'TEST',
-        persons: [
-            { noodle: 'Khmer Noodle', extraNoodle: false, note: 'Test print' }
-        ],
-        extras: [{ name: 'Coke', qty: 1, price: 2500 }],
-        total: 10500,
-        customer: 'Test',
-        paymentMethod: 'cash'
+    const order = { 
+        tableNum: currentTable, persons: t.persons, extras: t.extras, 
+        total: t.total, customer: t.customer || 'Regular', paymentMethod: 'cash', discount: 0 
     };
-    printReceipt(testOrder);
+    
+    if (!btDevice || !btCharacteristic) { alert('Connect Bluetooth printer first!'); return; }
+    
+    (async () => {
+        try {
+            if (!btDevice.gatt.connected) await btDevice.gatt.connect();
+            const kitchenTicket = buildKitchenTicket(order);
+            await sendToPrinter(kitchenTicket);
+            alert('Kitchen ticket printed!');
+        } catch(e) { alert('Print failed'); }
+    })();
 }
 
 // ============================================
@@ -750,9 +610,9 @@ function renderKitchen() {
     kitchenQueue.forEach(o => {
         const ticket = document.createElement('div');
         ticket.className = 'bg-white p-2 rounded border shadow-sm text-xs';
-        ticket.innerHTML = `<div class="flex justify-between mb-1"><b>🍲 T${o.tableNum}</b><span class="text-gray-400">${new Date(o.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>
-        <div class="text-right mb-1"><b>👤 ${o.customer||'Regular'}</b></div>
-        ${o.persons.map((p,i) => `<div class="border-t pt-1 mb-1"><b>P${i+1}:</b> ${p.noodle}${p.extraNoodle?' +Extra':''}${p.note?`<div class="text-gray-500">📝 ${p.note}</div>`:''}</div>`).join('')}
+        ticket.innerHTML = `<div class="flex justify-between mb-1"><b>T${o.tableNum}</b><span class="text-gray-400">${new Date(o.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div>
+        <div class="text-right mb-1"><b>${o.customer||'Regular'}</b></div>
+        ${o.persons.map((p,i) => `<div class="border-t pt-1 mb-1"><b>P${i+1}:</b> ${p.noodle}${p.extraNoodle?' +Extra':''}${p.note?`<div class="text-gray-500">${p.note}</div>`:''}</div>`).join('')}
         ${o.extras.length>0?`<div class="border-t pt-1"><b>Extras:</b> ${o.extras.map(e=>e.name+' x'+(e.qty||1)).join(', ')}</div>`:''}
         <div class="flex gap-1 mt-2">${getKitchenActions(o)}</div>`;
         if(o.status==='pending'){pEl.appendChild(ticket);c.pending++;}
@@ -791,10 +651,10 @@ function filterCustomerDropdown() {
     list.classList.remove('hidden');
     let names = Object.keys(customers).sort((a,b)=>(customers[b]?.totalVisits||0)-(customers[a]?.totalVisits||0));
     if(s) names = names.filter(n=>n.toLowerCase().includes(s));
-    list.innerHTML = `<div onclick="selectCustomer('Regular Customer')" class="px-2 py-1.5 hover:bg-green-50 cursor-pointer border-b">👤 Regular Customer</div>
-    <div onclick="selectCustomer('__new__')" class="px-2 py-1.5 hover:bg-amber-50 cursor-pointer border-b">🆕 New Customer</div>`;
-    if(names.length===0 && s) list.innerHTML += `<div class="px-2 py-1 text-gray-400">No match — type to add</div>`;
-    else names.forEach(n => { const c=customers[n]; list.innerHTML += `<div onclick="selectCustomer('${n}')" class="px-2 py-1.5 hover:bg-orange-50 cursor-pointer flex justify-between"><span>${c.totalVisits>=20?'⭐':''} ${n}</span><span class="text-gray-400">${c.totalVisits||0}v</span></div>`; });
+    list.innerHTML = `<div onclick="selectCustomer('Regular Customer')" class="px-2 py-1.5 hover:bg-green-50 cursor-pointer border-b">Regular Customer</div>
+    <div onclick="selectCustomer('__new__')" class="px-2 py-1.5 hover:bg-amber-50 cursor-pointer border-b">New Customer</div>`;
+    if(names.length===0 && s) list.innerHTML += `<div class="px-2 py-1 text-gray-400">No match - type to add</div>`;
+    else names.forEach(n => { const c=customers[n]; list.innerHTML += `<div onclick="selectCustomer('${n}')" class="px-2 py-1.5 hover:bg-orange-50 cursor-pointer flex justify-between"><span>${c.totalVisits>=20?'':''} ${n}</span><span class="text-gray-400">${c.totalVisits||0}v</span></div>`; });
 }
 function selectCustomer(n) {
     const inp = document.getElementById('customer-input'), dd = document.getElementById('customer-dropdown');
@@ -812,15 +672,15 @@ function addPinDigit(d){const i=document.getElementById('login-pin-input');if(i&
 function clearPinInput(){document.getElementById('login-pin-input').value='';}
 function submitLogin(){
     const pin=document.getElementById('login-pin-input').value;
-    if(pin==='7889'){currentUser={name:'Admin (Master)',role:'admin',pin:'7889'};saveAllData();updateUIForUser();hideLoginModal();alert('🔑 Master Admin!');return;}
-    if(staffMembers[pin]){currentUser={...staffMembers[pin],pin};saveAllData();updateUIForUser();hideLoginModal();alert(`Welcome, ${currentUser.name}!`);}
-    else{alert('❌ Invalid PIN');}
+    if(pin==='7889'){currentUser={name:'Admin (Master)',role:'admin',pin:'7889'};saveAllData();updateUIForUser();hideLoginModal();alert('Master Admin!');return;}
+    if(staffMembers[pin]){currentUser={...staffMembers[pin],pin};saveAllData();updateUIForUser();hideLoginModal();alert('Welcome, '+currentUser.name+'!');}
+    else{alert('Invalid PIN');}
 }
 function logout(){currentUser=null;localStorage.removeItem('hotpotCurrentUser');updateUIForUser();alert('Logged out');}
 function updateUIForUser(){
     const lb=document.getElementById('login-btn'),ob=document.getElementById('logout-btn'),an=document.getElementById('nav-admin'),rn=document.getElementById('nav-reports');
-    if(currentUser){lb.innerText='👤 '+currentUser.name;ob.classList.remove('hidden');if(currentUser.role!=='admin'){an.style.display='none';rn.style.display='none';}}
-    else{lb.innerText='🔐 Login';ob.classList.add('hidden');an.style.display='flex';rn.style.display='flex';}
+    if(currentUser){lb.innerText=currentUser.name;ob.classList.remove('hidden');if(currentUser.role!=='admin'){an.style.display='none';rn.style.display='none';}}
+    else{lb.innerText='Login';ob.classList.add('hidden');an.style.display='flex';rn.style.display='flex';}
 }
 
 // ============================================
@@ -828,12 +688,12 @@ function updateUIForUser(){
 // ============================================
 function openNoodleManager(){document.getElementById('noodle-manager').style.display='block';document.getElementById('drink-manager').style.display='none';renderNoodleList();}
 function openDrinkManager(){document.getElementById('noodle-manager').style.display='none';document.getElementById('drink-manager').style.display='block';renderDrinkList();}
-function renderNoodleList(){document.getElementById('noodle-list').innerHTML=noodles.map((n,i)=>`<div class="flex gap-2 items-center"><input value="${n.name}" onchange="noodles[${i}].name=this.value" class="flex-1 border rounded px-2 py-1 text-sm"><button onclick="noodles.splice(${i},1);renderNoodleList()" class="text-red-500 text-sm">✕</button></div>`).join('');}
+function renderNoodleList(){document.getElementById('noodle-list').innerHTML=noodles.map((n,i)=>`<div class="flex gap-2 items-center"><input value="${n.name}" onchange="noodles[${i}].name=this.value" class="flex-1 border rounded px-2 py-1 text-sm"><button onclick="noodles.splice(${i},1);renderNoodleList()" class="text-red-500 text-sm">X</button></div>`).join('');}
 function addNoodleRow(){noodles.push({id:'n'+Date.now(),name:'New Noodle',price:0});renderNoodleList();}
-function saveNoodles(){localStorage.setItem('hotpotNoodles',JSON.stringify(noodles));alert('✅ Noodles saved!');renderOrderPanel();}
-function renderDrinkList(){document.getElementById('drink-list').innerHTML=drinks.map((d,i)=>`<div class="flex gap-2 items-center"><input value="${d.name}" onchange="drinks[${i}].name=this.value" class="flex-1 border rounded px-2 py-1 text-sm"><input type="number" value="${d.price}" onchange="drinks[${i}].price=parseInt(this.value)||0" class="w-20 border rounded px-2 py-1 text-sm"><button onclick="drinks.splice(${i},1);renderDrinkList()" class="text-red-500 text-sm">✕</button></div>`).join('');}
+function saveNoodles(){localStorage.setItem('hotpotNoodles',JSON.stringify(noodles));alert('Noodles saved!');renderOrderPanel();}
+function renderDrinkList(){document.getElementById('drink-list').innerHTML=drinks.map((d,i)=>`<div class="flex gap-2 items-center"><input value="${d.name}" onchange="drinks[${i}].name=this.value" class="flex-1 border rounded px-2 py-1 text-sm"><input type="number" value="${d.price}" onchange="drinks[${i}].price=parseInt(this.value)||0" class="w-20 border rounded px-2 py-1 text-sm"><button onclick="drinks.splice(${i},1);renderDrinkList()" class="text-red-500 text-sm">X</button></div>`).join('');}
 function addDrinkRow(){drinks.push({id:'d'+Date.now(),name:'New Drink',price:0});renderDrinkList();}
-function saveDrinks(){localStorage.setItem('hotpotDrinks',JSON.stringify(drinks));alert('✅ Drinks saved!');renderDrinkButtons();renderOrderPanel();}
+function saveDrinks(){localStorage.setItem('hotpotDrinks',JSON.stringify(drinks));alert('Drinks saved!');renderDrinkButtons();renderOrderPanel();}
 function openAddCustomerModal(){document.getElementById('new-customer-name').value='';document.getElementById('new-customer-phone').value='';document.getElementById('new-customer-visits').value='0';document.getElementById('add-customer-modal').classList.remove('hidden');document.getElementById('add-customer-modal').classList.add('flex');}
 function closeAddCustomerModal(){document.getElementById('add-customer-modal').classList.add('hidden');document.getElementById('add-customer-modal').classList.remove('flex');}
 function saveNewCustomer(){
@@ -841,15 +701,15 @@ function saveNewCustomer(){
     if(!n){alert('Enter name');return;}
     if(!customers[n]) customers[n]={name:n,phone:p,totalVisits:v,totalSpent:0,lastVisit:new Date().toISOString()};
     else{customers[n].phone=p||customers[n].phone;if(v>0)customers[n].totalVisits=v;}
-    saveAllData();alert(`✅ ${n} saved!`);closeAddCustomerModal();
+    saveAllData();alert(n+' saved!');closeAddCustomerModal();
 }
 function openStaffModal(){renderStaffTable();document.getElementById('staff-modal').classList.remove('hidden');document.getElementById('staff-modal').classList.add('flex');}
 function closeStaffModal(){document.getElementById('staff-modal').classList.add('hidden');document.getElementById('staff-modal').classList.remove('flex');}
 function renderStaffTable(){document.getElementById('staff-table-body').innerHTML=Object.entries(staffMembers).map(([pin,s])=>`<div class="flex justify-between items-center py-1 border-b"><span>${s.name} (${s.role})</span><span class="text-xs text-gray-500">PIN: ${pin}</span>${pin!=='1234'?`<button onclick="deleteStaff('${pin}')" class="text-red-500 text-xs">Del</button>`:''}</div>`).join('');}
-function addStaffMember(){const n=document.getElementById('new-staff-name').value.trim(),p=document.getElementById('new-staff-pin').value.trim(),r=document.getElementById('new-staff-role').value;if(!n||p.length!==4){alert('Valid name + 4-digit PIN');return;}staffMembers[p]={name:n,role:r};saveAllData();renderStaffTable();alert('✅ Added');}
+function addStaffMember(){const n=document.getElementById('new-staff-name').value.trim(),p=document.getElementById('new-staff-pin').value.trim(),r=document.getElementById('new-staff-role').value;if(!n||p.length!==4){alert('Valid name + 4-digit PIN');return;}staffMembers[p]={name:n,role:r};saveAllData();renderStaffTable();alert('Added');}
 function deleteStaff(pin){if(pin==='1234')return;delete staffMembers[pin];saveAllData();renderStaffTable();}
 function openChangePinModal(){
-    const s=document.getElementById('change-pin-staff');s.innerHTML='<option value="">— Choose —</option>';
+    const s=document.getElementById('change-pin-staff');s.innerHTML='<option value="">-- Choose --</option>';
     Object.entries(staffMembers).forEach(([pin,st])=>s.innerHTML+=`<option value="${pin}">${st.name} (${st.role}) - PIN: ${pin}</option>`);
     document.getElementById('change-pin-new').value='';document.getElementById('change-pin-modal').classList.remove('hidden');document.getElementById('change-pin-modal').classList.add('flex');
 }
@@ -857,13 +717,13 @@ function closeChangePinModal(){document.getElementById('change-pin-modal').class
 function saveNewPin(){
     const old=document.getElementById('change-pin-staff').value,np=document.getElementById('change-pin-new').value.trim();
     if(!old||np.length!==4){alert('Select staff + enter 4-digit PIN');return;}
-    const d=staffMembers[old];delete staffMembers[old];staffMembers[np]=d;saveAllData();alert('✅ PIN changed!');closeChangePinModal();
+    const d=staffMembers[old];delete staffMembers[old];staffMembers[np]=d;saveAllData();alert('PIN changed!');closeChangePinModal();
 }
 function openExpenseModal(){document.getElementById('expense-modal').classList.remove('hidden');document.getElementById('expense-modal').classList.add('flex');}
 function closeExpenseModal(){document.getElementById('expense-modal').classList.add('hidden');document.getElementById('expense-modal').classList.remove('flex');}
-function addExpense(){const d=document.getElementById('expense-desc').value.trim(),a=parseInt(document.getElementById('expense-amount').value);if(!d||!a){alert('Enter description + amount');return;}dailyExpenses.push({desc:d,amount:a,date:new Date()});alert('✅ Expense added');closeExpenseModal();}
+function addExpense(){const d=document.getElementById('expense-desc').value.trim(),a=parseInt(document.getElementById('expense-amount').value);if(!d||!a){alert('Enter description + amount');return;}dailyExpenses.push({desc:d,amount:a,date:new Date()});alert('Expense added');closeExpenseModal();}
 function quickExpense(d,a){document.getElementById('expense-desc').value=d;document.getElementById('expense-amount').value=a;addExpense();}
-function backupData(){alert('✅ Data saved to localStorage');}
+function backupData(){alert('Data saved to localStorage');}
 
 // ============================================
 // NAVIGATION
@@ -877,11 +737,10 @@ function switchView(v) {
     if(v==='reports') renderReports();
 }
 function renderReports(){
-    document.getElementById('rpt-revenue').innerText='៛'+dailyStats.revenue.toLocaleString();
+    document.getElementById('rpt-revenue').innerText=dailyStats.revenue.toLocaleString()+'R';
     document.getElementById('rpt-orders').innerText=dailyStats.orders;
-    document.getElementById('rpt-avg').innerText='៛'+(dailyStats.orders>0?Math.round(dailyStats.revenue/dailyStats.orders):0).toLocaleString();
+    document.getElementById('rpt-avg').innerText=(dailyStats.orders>0?Math.round(dailyStats.revenue/dailyStats.orders):0).toLocaleString()+'R';
     document.getElementById('rpt-tables').innerText=orders.length;
-    // Simple chart
     const ctx=document.getElementById('revenue-chart')?.getContext('2d');
     if(ctx) new Chart(ctx,{type:'bar',data:{labels:['Today'],datasets:[{label:'Revenue',data:[dailyStats.revenue],backgroundColor:'#dc2626'}]}});
 }
@@ -894,8 +753,8 @@ setInterval(updateClock,1000);
 // ============================================
 document.addEventListener('DOMContentLoaded',()=>{
     updateClock(); updateUIForUser(); renderTableGrid(); renderDrinkButtons(); updateStats(); renderKitchen();
-    console.log('🍲 KOOJI Hotpot POS Ready!');
+    autoReconnectPrinter(); // Auto-reconnect saved printer
+    console.log('KOOJI Hotpot POS Ready!');
 });
-</script>
-</body>
+</script></body>
 </html>
