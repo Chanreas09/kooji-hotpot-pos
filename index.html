@@ -494,85 +494,18 @@ function saveAllData() {
 // BLUETOOTH PRINTING
 // ============================================
 const PRINTER_SERVICES = [
-    '000018f0-0000-1000-8000-00805f9b34fb',
-    '00001101-0000-1000-8000-00805f9b34fb',
-    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '000018f0-0000-1000-8000-00805f9b34fb',  // Common thermal
+    '00001101-0000-1000-8000-00805f9b34fb',  // SPP (Serial Port Profile)
+    '0000ffe0-0000-1000-8000-00805f9b34fb',  // Chinese thermal printers
 ];
 
 let btDevice = null;
 let btCharacteristic = null;
-let savedPrinterId = localStorage.getItem('hotpotPrinterId') || null;
-
-// Check Bluetooth (Android needs Location ON)
-async function checkBluetoothReady() {
-    if (!navigator.bluetooth) {
-        alert('Bluetooth not supported. Use Chrome.');
-        return false;
-    }
-    try {
-        const available = await navigator.bluetooth.getAvailability();
-        if (!available) {
-            alert('Bluetooth is disabled.\nTurn on Bluetooth + Location/GPS.');
-            return false;
-        }
-    } catch(e) {}
-    return true;
-}
-
-// Auto-reconnect on page load
-async function autoReconnectPrinter() {
-    if (!savedPrinterId) return;
-    try {
-        const statusEl = document.getElementById('bluetooth-status');
-        statusEl.innerHTML = 'Auto-connecting...';
-        statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
-        
-        const devices = await navigator.bluetooth.getDevices();
-        const device = devices.find(d => d.id === savedPrinterId);
-        if (!device) { throw new Error('Not found'); }
-        
-        const server = await device.gatt.connect();
-        btDevice = device;
-        
-        // Find characteristic
-        let found = false;
-        for (const uuid of PRINTER_SERVICES) {
-            try {
-                const service = await server.getPrimaryService(uuid);
-                const chars = await service.getCharacteristics();
-                for (const char of chars) {
-                    if (char.properties.write || char.properties.writeWithoutResponse) {
-                        btCharacteristic = char;
-                        found = true;
-                        break;
-                    }
-                }
-                if (found) break;
-            } catch(e) {}
-        }
-        if (!found) throw new Error('No characteristic');
-        
-        const name = localStorage.getItem('hotpotPrinterName') || 'Printer';
-        statusEl.innerHTML = name;
-        statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
-        
-        device.addEventListener('gattserverdisconnected', () => {
-            statusEl.innerHTML = 'Printer Off';
-            statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-            btDevice = null;
-            btCharacteristic = null;
-        });
-    } catch(e) {
-        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
-        document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-    }
-}
 
 async function connectBluetooth() {
-    if (!await checkBluetoothReady()) return;
     try {
         const statusEl = document.getElementById('bluetooth-status');
-        statusEl.innerHTML = 'Scanning...';
+        statusEl.innerHTML = '🔵 Scanning...';
         statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
         
         const device = await navigator.bluetooth.requestDevice({ 
@@ -583,79 +516,78 @@ async function connectBluetooth() {
         const server = await device.gatt.connect();
         btDevice = device;
         
-        // Save for auto-reconnect
-        savedPrinterId = device.id;
-        localStorage.setItem('hotpotPrinterId', device.id);
-        localStorage.setItem('hotpotPrinterName', device.name);
-        
-        // Find characteristic (same logic)
         let found = false;
+        
         for (const uuid of PRINTER_SERVICES) {
             try {
                 const service = await server.getPrimaryService(uuid);
-                const chars = await service.getCharacteristics();
-                for (const char of chars) {
+                const characteristics = await service.getCharacteristics();
+                for (const char of characteristics) {
                     if (char.properties.write || char.properties.writeWithoutResponse) {
                         btCharacteristic = char;
                         found = true;
+                        console.log('✅ Found printer:', uuid);
                         break;
                     }
                 }
                 if (found) break;
             } catch(e) {}
         }
+        
         if (!found) {
             const services = await server.getPrimaryServices();
             for (const svc of services) {
-                const chars = await svc.getCharacteristics();
-                for (const char of chars) {
-                    if (char.properties.write || char.properties.writeWithoutResponse) {
-                        btCharacteristic = char;
-                        found = true;
-                        break;
+                try {
+                    const chars = await svc.getCharacteristics();
+                    for (const char of chars) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            btCharacteristic = char;
+                            found = true;
+                            break;
+                        }
                     }
-                }
-                if (found) break;
+                    if (found) break;
+                } catch(e) {}
             }
         }
-        if (!found) throw new Error('No writable characteristic');
         
-        statusEl.innerHTML = device.name;
+        if (!found) throw new Error('No writable characteristic found');
+        
+        statusEl.innerHTML = '🟢 ' + device.name;
         statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
         
-        const rs = document.getElementById('receipt-printer-select');
-        const ks = document.getElementById('kitchen-printer-select');
-        if (rs) rs.innerHTML = `<option>${device.name}</option>`;
-        if (ks) ks.innerHTML = `<option>${device.name}</option>`;
+        const receiptSelect = document.getElementById('receipt-printer-select');
+        const kitchenSelect = document.getElementById('kitchen-printer-select');
+        if (receiptSelect) receiptSelect.innerHTML = `<option value="${device.name}">${device.name}</option>`;
+        if (kitchenSelect) kitchenSelect.innerHTML = `<option value="${device.name}">${device.name}</option>`;
         
         device.addEventListener('gattserverdisconnected', () => {
-            statusEl.innerHTML = 'Printer Off';
+            statusEl.innerHTML = '🔴 Disconnected';
             statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
             btDevice = null;
             btCharacteristic = null;
         });
         
-        alert('Printer connected!\n' + device.name);
+        alert('✅ Bluetooth printer connected!\n' + device.name);
+        
     } catch(e) {
-        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
+        console.error(e);
+        document.getElementById('bluetooth-status').innerHTML = '🔵 Printer Off';
         document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-        if (e.name === 'NotFoundError') {
-            alert('No device selected.\n\nAndroid: Turn ON Bluetooth + Location/GPS');
-        } else if (e.name === 'SecurityError') {
-            alert('Permission denied.\nAndroid: Allow Location for Chrome');
-        } else {
-            alert('Connection failed: ' + (e.message || 'Unknown'));
-        }
+        
+        if (e.name === 'NotFoundError') alert('❌ No device selected.');
+        else if (e.name === 'SecurityError') alert('❌ Bluetooth permission denied.');
+        else alert('❌ Connection failed: ' + (e.message || 'Unknown error'));
     }
 }
 
 // ============================================
-// SEND DATA TO PRINTER
+// SEND RAW DATA TO PRINTER
 // ============================================
 async function sendToPrinter(text) {
     const encoder = new TextEncoder();
     const data = encoder.encode(text);
-    const CHUNK_SIZE = 512;
+    const CHUNK_SIZE = 256;
     
     for (let i = 0; i < data.length; i += CHUNK_SIZE) {
         const chunk = data.slice(i, Math.min(i + CHUNK_SIZE, data.length));
@@ -666,405 +598,142 @@ async function sendToPrinter(text) {
                 await btCharacteristic.writeValue(chunk);
             }
         } catch(e) {
-            for (let j = 0; j < chunk.length; j += 64) {
-                const mini = chunk.slice(j, Math.min(j + 64, chunk.length));
+            // Retry with smaller chunk
+            console.warn('Chunk failed, retrying byte-by-byte...');
+            for (let j = 0; j < chunk.length; j++) {
+                const single = chunk.slice(j, j + 1);
                 if (btCharacteristic.properties.writeWithoutResponse) {
-                    await btCharacteristic.writeValueWithoutResponse(mini);
+                    await btCharacteristic.writeValueWithoutResponse(single);
                 } else {
-                    await btCharacteristic.writeValue(mini);
+                    await btCharacteristic.writeValue(single);
                 }
+                await new Promise(r => setTimeout(r, 10));
             }
         }
         if (i + CHUNK_SIZE < data.length) {
-            await new Promise(r => setTimeout(r, 15));
+            await new Promise(r => setTimeout(r, 50));
         }
     }
 }
 
 // ============================================
-// SANITIZE TEXT (remove non-ASCII for printer)
-// ============================================
-function sanitizeText(str) {
-    return str
-        .replace(/៛/g, 'R')
-        .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
-        .replace(/[^\x00-\x7F\x0A\x0D]/g, '');
-}
-
-function padRight(str, len) {
-    return String(str) + ' '.repeat(Math.max(0, len - String(str).length));
-}
-
-function padLeft(str, len) {
-    return ' '.repeat(Math.max(0, len - String(str).length)) + String(str);
-}
-
-// ============================================
-// BUILD TICKETS
+// BUILD KITCHEN TICKET
 // ============================================
 function buildKitchenTicket(order) {
-    const WIDTH = 32;
-    const line = '='.repeat(WIDTH);
-    const dash = '-'.repeat(WIDTH);
+    const line = '------------------------------';
+    let txt = '\x1B\x40'; // ESC @ - Initialize printer
+    txt += '\x1B\x61\x01'; // ESC a 1 - Center align
     
-    let txt = '\x1B\x40\x1B\x61\x01\x1B\x21\x10';
-    txt += '\n' + line + '\n   KITCHEN ORDER\n' + line + '\n';
-    txt += '\x1B\x21\x00\x1B\x61\x00\n';
-    txt += padRight('  TABLE: ' + order.tableNum, WIDTH/2);
-    txt += padLeft('TIME: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), WIDTH/2) + '\n';
-    txt += '  PERSONS: ' + order.persons.length + '\n' + line + '\n\n';
+    txt += '\n🍲 KITCHEN ORDER 🍲\n';
+    txt += '*** HOTPOT ***\n\n';
     
-    order.persons.forEach((p, i) => {
-        txt += '\x1B\x45\x01  PERSON ' + (i+1) + '\n\x1B\x45\x00';
-        txt += '    Noodle : ' + p.noodle + '\n';
-        if (p.extraNoodle) txt += '    Extra  : + Extra Noodle\n';
-        if (p.note) txt += '    Note   : ' + sanitizeText(p.note) + '\n';
-        txt += '\n';
-    });
-    
-    if (order.extras && order.extras.length > 0) {
-        txt += dash + '\n  EXTRAS\n' + dash + '\n';
-        order.extras.forEach(e => txt += '    * ' + e.name + ' x' + (e.qty||1) + '\n');
-        txt += '\n';
-    }
-    
-    txt += '\x1B\x61\x01\x1B\x45\x01' + line + '\n  PLEASE PREPARE ASAP\n' + line + '\n\x1B\x45\x00';
-    txt += '\n\n\n\n\x1D\x56\x41';
-    return sanitizeText(txt);
-}
-
-function buildReceiptTicket(order) {
-    const WIDTH = 32;
-    const line = '='.repeat(WIDTH);
-    const dash = '-'.repeat(WIDTH);
-    const BASE_PRICE = 8000;
-    const EXTRA_NOODLE_PRICE = 2000;
-    
-    const today = new Date().toDateString();
-    let orderNum = parseInt(localStorage.getItem('hotpotOrderNum') || '0');
-    if (localStorage.getItem('hotpotOrderDate') !== today) {
-        orderNum = 1; localStorage.setItem('hotpotOrderDate', today);
-    } else { orderNum++; }
-    localStorage.setItem('hotpotOrderNum', orderNum);
-    const orderId = String(orderNum).padStart(3, '0');
-    
-    let txt = '\x1B\x40\x1B\x61\x01';
-    txt += '\x1B\x21\x10\n' + line + '\n   KOOJI: The Hotpot\n' + line + '\n\x1B\x21\x00';
-    txt += '  015 64 51 98\n  Chrey, Battambang, KH\n' + line + '\n\n';
-    txt += '\x1B\x61\x00';
-    txt += '- Table No  : ' + order.tableNum + '\n';
-    txt += '- Date : ' + new Date().toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) + '\n';
-    txt += '- Order : ' + orderId + '\n';
-    txt += '- Time      : ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '\n';
-    txt += '- Payment : ' + (order.paymentMethod === 'cash' ? 'Cash' : 'Bank') + '\n';
-    txt += '- Persons   : ' + order.persons.length + '\n';
-    if (order.customer) txt += '- Customer  : ' + order.customer + '\n';
-    txt += line + '\n\n';
-    txt += '\x1B\x61\x01\x1B\x45\x01  ORDER DETAILS\n\x1B\x45\x00' + dash + '\n\n';
-    txt += '\x1B\x61\x00';
-    
-    order.persons.forEach((p, i) => {
-        txt += '\x1B\x45\x01  Person ' + (i+1) + '\n\x1B\x45\x00';
-        txt += '    Noodle  : ' + p.noodle + '\n';
-        txt += '    Base    : ' + padLeft(BASE_PRICE.toLocaleString() + 'R', 12) + '\n';
-        if (p.extraNoodle) txt += '    Extra   : ' + padLeft(EXTRA_NOODLE_PRICE.toLocaleString() + 'R', 12) + '\n';
-        if (p.note) txt += '    Note    : ' + sanitizeText(p.note) + '\n';
-        txt += dash + '\n';
-    });
-    
-    if (order.extras && order.extras.length > 0) {
-        txt += '\x1B\x61\x01  Extras\n\x1B\x61\x00' + dash + '\n';
-        order.extras.forEach(e => {
-            const et = e.price * (e.qty||1);
-            txt += '    ' + e.name + ' x ' + (e.qty||1);
-            txt += padLeft(et.toLocaleString() + 'R', WIDTH - 6 - e.name.length - 4) + '\n';
-        });
-        txt += dash + '\n';
-    }
-    
-    let pTotal = order.persons.length * BASE_PRICE;
-    order.persons.forEach(p => { if (p.extraNoodle) pTotal += EXTRA_NOODLE_PRICE; });
-    let eTotal = order.extras.reduce((s, e) => s + (e.price * (e.qty || 1)), 0);
-    
-    txt += '\n\x1B\x61\x00';
-    txt += '  SUBTOTAL' + padLeft(pTotal.toLocaleString() + 'R', WIDTH - 10) + '\n';
-    txt += '  EXTRAS' + padLeft(eTotal.toLocaleString() + 'R', WIDTH - 8) + '\n\n';
-    txt += '\x1B\x45\x01\x1B\x21\x10';
-    txt += '  TOTAL' + padLeft(order.total.toLocaleString() + 'R', WIDTH - 7) + '\n';
-    txt += '\x1B\x21\x00\x1B\x45\x00';
-    txt += '\x1B\x61\x01' + line + '\n     THANK YOU!\n  Please visit again :)\n' + line + '\n';
-    txt += '  WiFi: koojiwifi#!\n';
-    txt += '\n\n\n\n\x1D\x56\x41';
-    return sanitizeText(txt);
-}
-
-// ============================================
-// PRINT BOTH TICKETS
-// ============================================
-async function printReceipt(order) {
-    if (!btDevice || !btCharacteristic) { 
-        alert('Connect Bluetooth printer first!');
-        return; 
-    }
-    try {
-        if (!btDevice.gatt.connected) {
-            document.getElementById('bluetooth-status').innerHTML = 'Reconnecting...';
-            await btDevice.gatt.connect();
-        }
-        const kt = buildKitchenTicket(order);
-        await sendToPrinter(kt);
-        await new Promise(r => setTimeout(r, 150));
-        const rt = buildReceiptTicket(order);
-        await sendToPrinter(rt);
-        document.getElementById('bluetooth-status').innerHTML = btDevice.name;
-        document.getElementById('bluetooth-status').className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
-        alert('Kitchen ticket + Receipt printed!');
-    } catch(e) {
-        btDevice = null; btCharacteristic = null;
-        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
-        document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-        alert('Print failed. Reconnect and try again.');
-    }
-}
-
-function printKitchenTicket() {
-    if (!currentTable) { alert('Select a table first'); return; }
-    const t = tables[currentTable];
-    const order = { tableNum: currentTable, persons: t.persons, extras: t.extras, total: t.total, customer: t.customer || 'Regular', paymentMethod: 'cash' };
-    if (!btDevice || !btCharacteristic) { alert('Connect printer first!'); return; }
-    (async () => {
-        try {
-            if (!btDevice.gatt.connected) await btDevice.gatt.connect();
-            await sendToPrinter(buildKitchenTicket(order));
-            alert('Kitchen ticket printed!');
-        } catch(e) { alert('Print failed'); }
-    })();
-}
-// ============================================
-// SEND RAW DATA TO PRINTER (FAST VERSION)
-// ============================================
-async function sendToPrinter(text) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    const CHUNK_SIZE = 512; // Bigger chunks = faster
-    
-    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-        const chunk = data.slice(i, Math.min(i + CHUNK_SIZE, data.length));
-        try {
-            if (btCharacteristic.properties.writeWithoutResponse) {
-                await btCharacteristic.writeValueWithoutResponse(chunk);
-            } else {
-                await btCharacteristic.writeValue(chunk);
-            }
-        } catch(e) {
-            // Only retry on fail
-            for (let j = 0; j < chunk.length; j += 64) {
-                const mini = chunk.slice(j, Math.min(j + 64, chunk.length));
-                if (btCharacteristic.properties.writeWithoutResponse) {
-                    await btCharacteristic.writeValueWithoutResponse(mini);
-                } else {
-                    await btCharacteristic.writeValue(mini);
-                }
-            }
-        }
-        // ⚡ Reduced delay from 50ms to 15ms
-        if (i + CHUNK_SIZE < data.length) {
-            await new Promise(r => setTimeout(r, 15));
-        }
-    }
-}
-// ============================================
-// SANITIZE TEXT HELPER (remove non-ASCII)
-// ============================================
-function sanitizeText(str) {
-    return str
-        .replace(/៛/g, 'R')
-        .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
-        .replace(/[^\x00-\x7F\x0A\x0D]/g, '');
-}
-
-function padRight(str, len) {
-    str = String(str);
-    return str + ' '.repeat(Math.max(0, len - str.length));
-}
-
-function padLeft(str, len) {
-    str = String(str);
-    return ' '.repeat(Math.max(0, len - str.length)) + str;
-}
-
-// ============================================
-// BUILD KITCHEN TICKET (Option B style)
-// ============================================
-function buildKitchenTicket(order) {
-    const WIDTH = 32; // characters per line for 58mm printer
-    const line = '='.repeat(WIDTH);
-    const dash = '-'.repeat(WIDTH);
-    
-    let txt = '\x1B\x40'; // Initialize printer
-    txt += '\x1B\x61\x01'; // Center align
-    txt += '\x1B\x21\x10'; // Double height
-    
-    txt += '\n' + line + '\n';
-    txt += '   KITCHEN ORDER\n';
+    txt += '\x1B\x61\x00'; // ESC a 0 - Left align
     txt += line + '\n';
-    
-    txt += '\x1B\x21\x00'; // Normal size
-    txt += '\x1B\x61\x00'; // Left align
-    
-    txt += '\n';
-    txt += padRight('  TABLE: ' + order.tableNum, WIDTH/2);
-    txt += padLeft('TIME: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), WIDTH/2) + '\n';
-    txt += '  PERSONS: ' + order.persons.length + '\n';
+    txt += 'Table: ' + order.tableNum + '\n';
+    txt += 'Time: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '\n';
+    txt += 'Persons: ' + order.persons.length + '\n';
     txt += line + '\n\n';
     
-    // Persons
+    // Bold for items
+    txt += '\x1B\x45\x01'; // ESC E 1 - Bold ON
+    
     order.persons.forEach((p, i) => {
-        txt += '\x1B\x45\x01'; // Bold ON
-        txt += '  PERSON ' + (i+1) + '\n';
-        txt += '\x1B\x45\x00'; // Bold OFF
-        txt += '    Noodle : ' + p.noodle + '\n';
-        if (p.extraNoodle) txt += '    Extra  : + Extra Noodle\n';
-        if (p.note) txt += '    Note   : ' + sanitizeText(p.note) + '\n';
+        txt += '👤 P' + (i+1) + ': ' + p.noodle + '\n';
+        if (p.extraNoodle) txt += '   ➕ EXTRA NOODLE\n';
+        if (p.note) txt += '   📝 ' + p.note + '\n';
         txt += '\n';
     });
     
-    // Extras
     if (order.extras && order.extras.length > 0) {
-        txt += dash + '\n';
-        txt += '  EXTRAS\n';
-        txt += dash + '\n';
+        txt += '--- EXTRAS ---\n';
         order.extras.forEach(e => {
-            txt += '    * ' + e.name + ' x' + (e.qty||1) + '\n';
+            txt += '  • ' + e.name + ' x' + (e.qty||1) + '\n';
         });
         txt += '\n';
     }
     
+    txt += '\x1B\x45\x00'; // ESC E 0 - Bold OFF
+    txt += line + '\n';
     txt += '\x1B\x61\x01'; // Center
-    txt += '\x1B\x45\x01'; // Bold
+    txt += 'PLEASE PREPARE ASAP!\n';
     txt += line + '\n';
-    txt += '  PLEASE PREPARE ASAP\n';
-    txt += line + '\n';
-    txt += '\x1B\x45\x00'; // Bold OFF
     
+    // Cut paper
     txt += '\n\n\n\n';
-    txt += '\x1D\x56\x41'; // Full cut
+    txt += '\x1D\x56\x41'; // GS V A - Full cut
     
-    return sanitizeText(txt);
+    return txt;
 }
 
 // ============================================
-// BUILD RECEIPT TICKET (Option B Premium)
+// BUILD RECEIPT TICKET
 // ============================================
 function buildReceiptTicket(order) {
-    const WIDTH = 32;
-    const line = '='.repeat(WIDTH);
-    const dash = '-'.repeat(WIDTH);
+    const line = '------------------------------';
+    let txt = '\x1B\x40'; // Initialize
+    txt += '\x1B\x61\x01'; // Center
+    
+    txt += '\n🍲 KOOJI Hotpot\n';
+    txt += 'Tel: 016 645 198\n';
+    txt += line + '\n';
+    
+    txt += '\x1B\x61\x00'; // Left align
+    txt += 'Table: ' + order.tableNum + '\n';
+    txt += 'Date: ' + new Date().toLocaleString() + '\n';
+    txt += line + '\n\n';
+    
+    // Persons breakdown
     const BASE_PRICE = 8000;
     const EXTRA_NOODLE_PRICE = 2000;
     
-    // Generate order number (daily counter)
-    const today = new Date().toDateString();
-    let orderNum = parseInt(localStorage.getItem('hotpotOrderNum') || '0');
-    if (localStorage.getItem('hotpotOrderDate') !== today) {
-        orderNum = 1;
-        localStorage.setItem('hotpotOrderDate', today);
-    } else {
-        orderNum++;
-    }
-    localStorage.setItem('hotpotOrderNum', orderNum);
-    const orderId = String(orderNum).padStart(3, '0');
-    
-    let txt = '\x1B\x40'; // Initialize
-    txt += '\x1B\x61\x01'; // Center align
-    
-    // Header
-    txt += '\x1B\x21\x10'; // Double height
-    txt += '\n' + line + '\n';
-    txt += '   KOOJI: The Hotpot\n';
-    txt += line + '\n';
-    txt += '\x1B\x21\x00'; // Normal size
-    
-    txt += '  015 64 51 98\n';
-    txt += '  Chrey, Battambang, KH\n';
-    txt += line + '\n\n';
-    
-    // Info section
-    txt += '\x1B\x61\x00'; // Left align
-    txt += '- Table No  : ' + order.tableNum + '\n';
-    txt += '- Date : ' + new Date().toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) + '\n';
-    txt += '- Order : ' + orderId + '\n';
-    txt += '- Time      : ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '\n';
-    txt += '- Payment : ' + (order.paymentMethod === 'cash' ? 'Cash' : 'Bank') + '\n';
-    txt += '- Persons   : ' + order.persons.length + '\n';
-    if (order.customer) txt += '- Customer  : ' + order.customer + '\n';
-    txt += line + '\n\n';
-    
-    // Order Details header
-    txt += '\x1B\x61\x01'; // Center
-    txt += '\x1B\x45\x01'; // Bold
-    txt += '  ORDER DETAILS\n';
-    txt += '\x1B\x45\x00'; // Bold OFF
-    txt += dash + '\n\n';
-    
-    // Person details
-    txt += '\x1B\x61\x00'; // Left align
     order.persons.forEach((p, i) => {
-        txt += '\x1B\x45\x01'; // Bold
-        txt += '  Person ' + (i+1) + '\n';
-        txt += '\x1B\x45\x00'; // Bold OFF
-        txt += '    Noodle  : ' + p.noodle + '\n';
-        txt += '    Base    : ' + padLeft(BASE_PRICE.toLocaleString() + 'R', 12) + '\n';
-        if (p.extraNoodle) {
-            txt += '    Extra   : ' + padLeft(EXTRA_NOODLE_PRICE.toLocaleString() + 'R', 12) + '\n';
-        }
-        if (p.note) txt += '    Note    : ' + sanitizeText(p.note) + '\n';
-        txt += dash + '\n';
+        txt += '👤 P' + (i+1) + ': ' + p.noodle + '\n';
+        txt += '   Base: 8,000៛\n';
+        if (p.extraNoodle) txt += '   +Extra Noodle: 2,000៛\n';
+        if (p.note) txt += '   📝 ' + p.note + '\n';
     });
     
     // Extras
     if (order.extras && order.extras.length > 0) {
-        txt += '\x1B\x61\x01'; // Center
-        txt += '  Extras\n';
-        txt += '\x1B\x61\x00'; // Left
-        txt += dash + '\n';
+        txt += '\n--- Extras ---\n';
         order.extras.forEach(e => {
             const extTotal = e.price * (e.qty || 1);
-            txt += '    ' + e.name + ' x ' + (e.qty||1);
-            txt += padLeft(extTotal.toLocaleString() + 'R', WIDTH - 6 - e.name.length - 4) + '\n';
+            txt += '  ' + e.name + ' x' + (e.qty||1) + ': ' + extTotal.toLocaleString() + '៛\n';
         });
-        txt += dash + '\n';
     }
     
-    // Totals
+    // Calculate totals
     let personTotal = order.persons.length * BASE_PRICE;
     order.persons.forEach(p => { if (p.extraNoodle) personTotal += EXTRA_NOODLE_PRICE; });
     let extrasTotal = order.extras.reduce((s, e) => s + (e.price * (e.qty || 1)), 0);
     
-    txt += '\n';
-    txt += '\x1B\x61\x00'; // Left
-    txt += '  SUBTOTAL' + padLeft(personTotal.toLocaleString() + 'R', WIDTH - 10) + '\n';
-    txt += '  EXTRAS' + padLeft(extrasTotal.toLocaleString() + 'R', WIDTH - 8) + '\n';
-    txt += '\n';
+    txt += '\n' + line + '\n';
+    txt += 'Persons: ' + personTotal.toLocaleString() + '៛\n';
+    txt += 'Extras:  ' + extrasTotal.toLocaleString() + '៛\n';
+    
+    if (order.discount && order.discount > 0) {
+        txt += 'Discount: -' + order.discount.toLocaleString() + '៛\n';
+    }
     
     txt += '\x1B\x45\x01'; // Bold ON
-    txt += '\x1B\x21\x10'; // Double height
-    txt += '  TOTAL' + padLeft(order.total.toLocaleString() + 'R', WIDTH - 7) + '\n';
-    txt += '\x1B\x21\x00'; // Normal
+    txt += line + '\n';
+    txt += 'TOTAL: ' + order.total.toLocaleString() + '៛\n';
+    txt += line + '\n';
     txt += '\x1B\x45\x00'; // Bold OFF
     
-    // Footer
     txt += '\x1B\x61\x01'; // Center
-    txt += line + '\n';
-    txt += '     THANK YOU!\n';
-    txt += '  Please visit again :)\n';
-    txt += line + '\n';
-    txt += '  WiFi: koojiwifi#!\n';
+    if (order.customer) txt += 'Customer: ' + order.customer + '\n';
+    if (order.paymentMethod) {
+        txt += 'Payment: ' + (order.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Bank') + '\n';
+    }
+    txt += '\nTHANK YOU! 🍲\n';
+    txt += 'Please come again!\n';
     
+    // Cut
     txt += '\n\n\n\n';
     txt += '\x1D\x56\x41'; // Full cut
     
-    return sanitizeText(txt);
+    return txt;
 }
 
 // ============================================
@@ -1089,7 +758,7 @@ async function printReceipt(order) {
         await sendToPrinter(kitchenTicket);
         
         // Small delay for paper feed
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 500));
         
         // 2️⃣ PRINT CUSTOMER RECEIPT
         const receiptTicket = buildReceiptTicket(order);
@@ -1301,8 +970,7 @@ setInterval(updateClock,1000);
 // ============================================
 document.addEventListener('DOMContentLoaded',()=>{
     updateClock(); updateUIForUser(); renderTableGrid(); renderDrinkButtons(); updateStats(); renderKitchen();
-    autoReconnectPrinter(); // ← ADD THIS LINE
-    console.log('KOOJI Hotpot POS Ready!');
+    console.log('🍲 KOOJI Hotpot POS Ready!');
 });
 </script>
 </body>
