@@ -494,120 +494,85 @@ function saveAllData() {
 // BLUETOOTH PRINTING
 // ============================================
 const PRINTER_SERVICES = [
-    '000018f0-0000-1000-8000-00805f9b34fb',  // Common thermal
-    '00001101-0000-1000-8000-00805f9b34fb',  // SPP (Serial Port Profile)
-    '0000ffe0-0000-1000-8000-00805f9b34fb',  // Chinese thermal printers
+    '000018f0-0000-1000-8000-00805f9b34fb',
+    '00001101-0000-1000-8000-00805f9b34fb',
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
 ];
 
 let btDevice = null;
 let btCharacteristic = null;
 let savedPrinterId = localStorage.getItem('hotpotPrinterId') || null;
 
-// Check if Bluetooth is available (Android needs Location ON)
+// Check Bluetooth (Android needs Location ON)
 async function checkBluetoothReady() {
     if (!navigator.bluetooth) {
-        alert('❌ Bluetooth not supported.\nUse Chrome on Android or Desktop.');
+        alert('Bluetooth not supported. Use Chrome.');
         return false;
     }
     try {
         const available = await navigator.bluetooth.getAvailability();
         if (!available) {
-            alert('❌ Bluetooth is disabled.\n\nTurn on:\n- Bluetooth\n- Location / GPS');
+            alert('Bluetooth is disabled.\nTurn on Bluetooth + Location/GPS.');
             return false;
         }
-    } catch(e) {
-        // getAvailability may not exist on all browsers
-    }
+    } catch(e) {}
     return true;
 }
 
-// Auto-reconnect to previously paired printer
+// Auto-reconnect on page load
 async function autoReconnectPrinter() {
     if (!savedPrinterId) return;
-    
     try {
         const statusEl = document.getElementById('bluetooth-status');
-        statusEl.innerHTML = '🔵 Auto-connecting...';
+        statusEl.innerHTML = 'Auto-connecting...';
         statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
         
         const devices = await navigator.bluetooth.getDevices();
-        const savedDevice = devices.find(d => d.id === savedPrinterId);
+        const device = devices.find(d => d.id === savedPrinterId);
+        if (!device) { throw new Error('Not found'); }
         
-        if (savedDevice) {
-            const server = await savedDevice.gatt.connect();
-            btDevice = savedDevice;
-            
-            let found = false;
-            for (const uuid of PRINTER_SERVICES) {
-                try {
-                    const service = await server.getPrimaryService(uuid);
-                    const chars = await service.getCharacteristics();
-                    for (const char of chars) {
-                        if (char.properties.write || char.properties.writeWithoutResponse) {
-                            btCharacteristic = char;
-                            found = true;
-                            break;
-                        }
+        const server = await device.gatt.connect();
+        btDevice = device;
+        
+        // Find characteristic
+        let found = false;
+        for (const uuid of PRINTER_SERVICES) {
+            try {
+                const service = await server.getPrimaryService(uuid);
+                const chars = await service.getCharacteristics();
+                for (const char of chars) {
+                    if (char.properties.write || char.properties.writeWithoutResponse) {
+                        btCharacteristic = char;
+                        found = true;
+                        break;
                     }
-                    if (found) break;
-                } catch(e) {}
-            }
-            
-            if (!found) {
-                const services = await server.getPrimaryServices();
-                for (const svc of services) {
-                    const chars = await svc.getCharacteristics();
-                    for (const char of chars) {
-                        if (char.properties.write || char.properties.writeWithoutResponse) {
-                            btCharacteristic = char;
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (found) break;
                 }
-            }
-            
-            if (found) {
-                const name = localStorage.getItem('hotpotPrinterName') || 'Printer';
-                statusEl.innerHTML = '🟢 ' + name;
-                statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
-                console.log('✅ Auto-reconnected to printer:', name);
-                
-                const rs = document.getElementById('receipt-printer-select');
-                const ks = document.getElementById('kitchen-printer-select');
-                if (rs) rs.innerHTML = `<option>${name}</option>`;
-                if (ks) ks.innerHTML = `<option>${name}</option>`;
-                
-                savedDevice.addEventListener('gattserverdisconnected', () => {
-                    statusEl.innerHTML = '🔴 Disconnected';
-                    statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-                    btDevice = null;
-                    btCharacteristic = null;
-                });
-                return; // Successfully reconnected
-            }
+                if (found) break;
+            } catch(e) {}
         }
-        // If we get here, device not found or no characteristic
-        statusEl.innerHTML = '🔵 Printer Off';
-        statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-    } catch(e) {
-        console.log('Auto-reconnect failed — click Connect BT');
-        const statusEl = document.getElementById('bluetooth-status');
-        if (statusEl) {
-            statusEl.innerHTML = '🔵 Printer Off';
+        if (!found) throw new Error('No characteristic');
+        
+        const name = localStorage.getItem('hotpotPrinterName') || 'Printer';
+        statusEl.innerHTML = name;
+        statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
+        
+        device.addEventListener('gattserverdisconnected', () => {
+            statusEl.innerHTML = 'Printer Off';
             statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-        }
+            btDevice = null;
+            btCharacteristic = null;
+        });
+    } catch(e) {
+        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
+        document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
     }
 }
 
 async function connectBluetooth() {
-    // Check Bluetooth + Location first
     if (!await checkBluetoothReady()) return;
-    
     try {
         const statusEl = document.getElementById('bluetooth-status');
-        statusEl.innerHTML = '🔵 Scanning...';
+        statusEl.innerHTML = 'Scanning...';
         statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
         
         const device = await navigator.bluetooth.requestDevice({ 
@@ -618,78 +583,262 @@ async function connectBluetooth() {
         const server = await device.gatt.connect();
         btDevice = device;
         
-        // ✅ SAVE printer ID for auto-reconnect
+        // Save for auto-reconnect
         savedPrinterId = device.id;
         localStorage.setItem('hotpotPrinterId', device.id);
         localStorage.setItem('hotpotPrinterName', device.name);
         
+        // Find characteristic (same logic)
         let found = false;
-        
         for (const uuid of PRINTER_SERVICES) {
             try {
                 const service = await server.getPrimaryService(uuid);
-                const characteristics = await service.getCharacteristics();
-                for (const char of characteristics) {
+                const chars = await service.getCharacteristics();
+                for (const char of chars) {
                     if (char.properties.write || char.properties.writeWithoutResponse) {
                         btCharacteristic = char;
                         found = true;
-                        console.log('✅ Found printer:', uuid);
                         break;
                     }
                 }
                 if (found) break;
             } catch(e) {}
         }
-        
         if (!found) {
             const services = await server.getPrimaryServices();
             for (const svc of services) {
-                try {
-                    const chars = await svc.getCharacteristics();
-                    for (const char of chars) {
-                        if (char.properties.write || char.properties.writeWithoutResponse) {
-                            btCharacteristic = char;
-                            found = true;
-                            break;
-                        }
+                const chars = await svc.getCharacteristics();
+                for (const char of chars) {
+                    if (char.properties.write || char.properties.writeWithoutResponse) {
+                        btCharacteristic = char;
+                        found = true;
+                        break;
                     }
-                    if (found) break;
-                } catch(e) {}
+                }
+                if (found) break;
             }
         }
+        if (!found) throw new Error('No writable characteristic');
         
-        if (!found) throw new Error('No writable characteristic found');
-        
-        statusEl.innerHTML = '🟢 ' + device.name;
+        statusEl.innerHTML = device.name;
         statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
         
-        const receiptSelect = document.getElementById('receipt-printer-select');
-        const kitchenSelect = document.getElementById('kitchen-printer-select');
-        if (receiptSelect) receiptSelect.innerHTML = `<option>${device.name}</option>`;
-        if (kitchenSelect) kitchenSelect.innerHTML = `<option>${device.name}</option>`;
+        const rs = document.getElementById('receipt-printer-select');
+        const ks = document.getElementById('kitchen-printer-select');
+        if (rs) rs.innerHTML = `<option>${device.name}</option>`;
+        if (ks) ks.innerHTML = `<option>${device.name}</option>`;
         
         device.addEventListener('gattserverdisconnected', () => {
-            statusEl.innerHTML = '🔴 Disconnected';
+            statusEl.innerHTML = 'Printer Off';
             statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
             btDevice = null;
             btCharacteristic = null;
         });
         
-        alert('✅ Bluetooth printer connected!\n' + device.name);
-        
+        alert('Printer connected!\n' + device.name);
     } catch(e) {
-        console.error(e);
-        document.getElementById('bluetooth-status').innerHTML = '🔵 Printer Off';
+        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
         document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
-        
         if (e.name === 'NotFoundError') {
-            alert('❌ No device selected.\n\n📱 Android Users:\n1. Turn ON Bluetooth\n2. Turn ON Location/GPS\n3. Pair printer in Settings first\n4. Allow Location for Chrome');
+            alert('No device selected.\n\nAndroid: Turn ON Bluetooth + Location/GPS');
         } else if (e.name === 'SecurityError') {
-            alert('❌ Permission denied.\n\n📱 On Android:\nSettings → Apps → Chrome → Permissions → Allow Location');
+            alert('Permission denied.\nAndroid: Allow Location for Chrome');
         } else {
-            alert('❌ Connection failed: ' + (e.message || 'Unknown error'));
+            alert('Connection failed: ' + (e.message || 'Unknown'));
         }
     }
+}
+
+// ============================================
+// SEND DATA TO PRINTER
+// ============================================
+async function sendToPrinter(text) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const CHUNK_SIZE = 512;
+    
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+        const chunk = data.slice(i, Math.min(i + CHUNK_SIZE, data.length));
+        try {
+            if (btCharacteristic.properties.writeWithoutResponse) {
+                await btCharacteristic.writeValueWithoutResponse(chunk);
+            } else {
+                await btCharacteristic.writeValue(chunk);
+            }
+        } catch(e) {
+            for (let j = 0; j < chunk.length; j += 64) {
+                const mini = chunk.slice(j, Math.min(j + 64, chunk.length));
+                if (btCharacteristic.properties.writeWithoutResponse) {
+                    await btCharacteristic.writeValueWithoutResponse(mini);
+                } else {
+                    await btCharacteristic.writeValue(mini);
+                }
+            }
+        }
+        if (i + CHUNK_SIZE < data.length) {
+            await new Promise(r => setTimeout(r, 15));
+        }
+    }
+}
+
+// ============================================
+// SANITIZE TEXT (remove non-ASCII for printer)
+// ============================================
+function sanitizeText(str) {
+    return str
+        .replace(/៛/g, 'R')
+        .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+        .replace(/[^\x00-\x7F\x0A\x0D]/g, '');
+}
+
+function padRight(str, len) {
+    return String(str) + ' '.repeat(Math.max(0, len - String(str).length));
+}
+
+function padLeft(str, len) {
+    return ' '.repeat(Math.max(0, len - String(str).length)) + String(str);
+}
+
+// ============================================
+// BUILD TICKETS
+// ============================================
+function buildKitchenTicket(order) {
+    const WIDTH = 32;
+    const line = '='.repeat(WIDTH);
+    const dash = '-'.repeat(WIDTH);
+    
+    let txt = '\x1B\x40\x1B\x61\x01\x1B\x21\x10';
+    txt += '\n' + line + '\n   KITCHEN ORDER\n' + line + '\n';
+    txt += '\x1B\x21\x00\x1B\x61\x00\n';
+    txt += padRight('  TABLE: ' + order.tableNum, WIDTH/2);
+    txt += padLeft('TIME: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), WIDTH/2) + '\n';
+    txt += '  PERSONS: ' + order.persons.length + '\n' + line + '\n\n';
+    
+    order.persons.forEach((p, i) => {
+        txt += '\x1B\x45\x01  PERSON ' + (i+1) + '\n\x1B\x45\x00';
+        txt += '    Noodle : ' + p.noodle + '\n';
+        if (p.extraNoodle) txt += '    Extra  : + Extra Noodle\n';
+        if (p.note) txt += '    Note   : ' + sanitizeText(p.note) + '\n';
+        txt += '\n';
+    });
+    
+    if (order.extras && order.extras.length > 0) {
+        txt += dash + '\n  EXTRAS\n' + dash + '\n';
+        order.extras.forEach(e => txt += '    * ' + e.name + ' x' + (e.qty||1) + '\n');
+        txt += '\n';
+    }
+    
+    txt += '\x1B\x61\x01\x1B\x45\x01' + line + '\n  PLEASE PREPARE ASAP\n' + line + '\n\x1B\x45\x00';
+    txt += '\n\n\n\n\x1D\x56\x41';
+    return sanitizeText(txt);
+}
+
+function buildReceiptTicket(order) {
+    const WIDTH = 32;
+    const line = '='.repeat(WIDTH);
+    const dash = '-'.repeat(WIDTH);
+    const BASE_PRICE = 8000;
+    const EXTRA_NOODLE_PRICE = 2000;
+    
+    const today = new Date().toDateString();
+    let orderNum = parseInt(localStorage.getItem('hotpotOrderNum') || '0');
+    if (localStorage.getItem('hotpotOrderDate') !== today) {
+        orderNum = 1; localStorage.setItem('hotpotOrderDate', today);
+    } else { orderNum++; }
+    localStorage.setItem('hotpotOrderNum', orderNum);
+    const orderId = String(orderNum).padStart(3, '0');
+    
+    let txt = '\x1B\x40\x1B\x61\x01';
+    txt += '\x1B\x21\x10\n' + line + '\n   KOOJI: The Hotpot\n' + line + '\n\x1B\x21\x00';
+    txt += '  015 64 51 98\n  Chrey, Battambang, KH\n' + line + '\n\n';
+    txt += '\x1B\x61\x00';
+    txt += '- Table No  : ' + order.tableNum + '\n';
+    txt += '- Date : ' + new Date().toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) + '\n';
+    txt += '- Order : ' + orderId + '\n';
+    txt += '- Time      : ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '\n';
+    txt += '- Payment : ' + (order.paymentMethod === 'cash' ? 'Cash' : 'Bank') + '\n';
+    txt += '- Persons   : ' + order.persons.length + '\n';
+    if (order.customer) txt += '- Customer  : ' + order.customer + '\n';
+    txt += line + '\n\n';
+    txt += '\x1B\x61\x01\x1B\x45\x01  ORDER DETAILS\n\x1B\x45\x00' + dash + '\n\n';
+    txt += '\x1B\x61\x00';
+    
+    order.persons.forEach((p, i) => {
+        txt += '\x1B\x45\x01  Person ' + (i+1) + '\n\x1B\x45\x00';
+        txt += '    Noodle  : ' + p.noodle + '\n';
+        txt += '    Base    : ' + padLeft(BASE_PRICE.toLocaleString() + 'R', 12) + '\n';
+        if (p.extraNoodle) txt += '    Extra   : ' + padLeft(EXTRA_NOODLE_PRICE.toLocaleString() + 'R', 12) + '\n';
+        if (p.note) txt += '    Note    : ' + sanitizeText(p.note) + '\n';
+        txt += dash + '\n';
+    });
+    
+    if (order.extras && order.extras.length > 0) {
+        txt += '\x1B\x61\x01  Extras\n\x1B\x61\x00' + dash + '\n';
+        order.extras.forEach(e => {
+            const et = e.price * (e.qty||1);
+            txt += '    ' + e.name + ' x ' + (e.qty||1);
+            txt += padLeft(et.toLocaleString() + 'R', WIDTH - 6 - e.name.length - 4) + '\n';
+        });
+        txt += dash + '\n';
+    }
+    
+    let pTotal = order.persons.length * BASE_PRICE;
+    order.persons.forEach(p => { if (p.extraNoodle) pTotal += EXTRA_NOODLE_PRICE; });
+    let eTotal = order.extras.reduce((s, e) => s + (e.price * (e.qty || 1)), 0);
+    
+    txt += '\n\x1B\x61\x00';
+    txt += '  SUBTOTAL' + padLeft(pTotal.toLocaleString() + 'R', WIDTH - 10) + '\n';
+    txt += '  EXTRAS' + padLeft(eTotal.toLocaleString() + 'R', WIDTH - 8) + '\n\n';
+    txt += '\x1B\x45\x01\x1B\x21\x10';
+    txt += '  TOTAL' + padLeft(order.total.toLocaleString() + 'R', WIDTH - 7) + '\n';
+    txt += '\x1B\x21\x00\x1B\x45\x00';
+    txt += '\x1B\x61\x01' + line + '\n     THANK YOU!\n  Please visit again :)\n' + line + '\n';
+    txt += '  WiFi: koojiwifi#!\n';
+    txt += '\n\n\n\n\x1D\x56\x41';
+    return sanitizeText(txt);
+}
+
+// ============================================
+// PRINT BOTH TICKETS
+// ============================================
+async function printReceipt(order) {
+    if (!btDevice || !btCharacteristic) { 
+        alert('Connect Bluetooth printer first!');
+        return; 
+    }
+    try {
+        if (!btDevice.gatt.connected) {
+            document.getElementById('bluetooth-status').innerHTML = 'Reconnecting...';
+            await btDevice.gatt.connect();
+        }
+        const kt = buildKitchenTicket(order);
+        await sendToPrinter(kt);
+        await new Promise(r => setTimeout(r, 150));
+        const rt = buildReceiptTicket(order);
+        await sendToPrinter(rt);
+        document.getElementById('bluetooth-status').innerHTML = btDevice.name;
+        document.getElementById('bluetooth-status').className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
+        alert('Kitchen ticket + Receipt printed!');
+    } catch(e) {
+        btDevice = null; btCharacteristic = null;
+        document.getElementById('bluetooth-status').innerHTML = 'Printer Off';
+        document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
+        alert('Print failed. Reconnect and try again.');
+    }
+}
+
+function printKitchenTicket() {
+    if (!currentTable) { alert('Select a table first'); return; }
+    const t = tables[currentTable];
+    const order = { tableNum: currentTable, persons: t.persons, extras: t.extras, total: t.total, customer: t.customer || 'Regular', paymentMethod: 'cash' };
+    if (!btDevice || !btCharacteristic) { alert('Connect printer first!'); return; }
+    (async () => {
+        try {
+            if (!btDevice.gatt.connected) await btDevice.gatt.connect();
+            await sendToPrinter(buildKitchenTicket(order));
+            alert('Kitchen ticket printed!');
+        } catch(e) { alert('Print failed'); }
+    })();
 }
 // ============================================
 // SEND RAW DATA TO PRINTER (FAST VERSION)
@@ -1152,8 +1301,8 @@ setInterval(updateClock,1000);
 // ============================================
 document.addEventListener('DOMContentLoaded',()=>{
     updateClock(); updateUIForUser(); renderTableGrid(); renderDrinkButtons(); updateStats(); renderKitchen();
-    autoReconnectPrinter(); // ✅ Auto-reconnect saved printer
-    console.log('🍲 KOOJI Hotpot POS Ready!');
+    autoReconnectPrinter(); // ← ADD THIS LINE
+    console.log('KOOJI Hotpot POS Ready!');
 });
 </script>
 </body>
