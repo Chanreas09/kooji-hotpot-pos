@@ -501,8 +501,110 @@ const PRINTER_SERVICES = [
 
 let btDevice = null;
 let btCharacteristic = null;
+let savedPrinterId = localStorage.getItem('hotpotPrinterId') || null;
+
+// Check if Bluetooth is available (Android needs Location ON)
+async function checkBluetoothReady() {
+    if (!navigator.bluetooth) {
+        alert('❌ Bluetooth not supported.\nUse Chrome on Android or Desktop.');
+        return false;
+    }
+    try {
+        const available = await navigator.bluetooth.getAvailability();
+        if (!available) {
+            alert('❌ Bluetooth is disabled.\n\nTurn on:\n- Bluetooth\n- Location / GPS');
+            return false;
+        }
+    } catch(e) {
+        // getAvailability may not exist on all browsers
+    }
+    return true;
+}
+
+// Auto-reconnect to previously paired printer
+async function autoReconnectPrinter() {
+    if (!savedPrinterId) return;
+    
+    try {
+        const statusEl = document.getElementById('bluetooth-status');
+        statusEl.innerHTML = '🔵 Auto-connecting...';
+        statusEl.className = 'text-xs bg-yellow-500 px-2 py-1 rounded-full';
+        
+        const devices = await navigator.bluetooth.getDevices();
+        const savedDevice = devices.find(d => d.id === savedPrinterId);
+        
+        if (savedDevice) {
+            const server = await savedDevice.gatt.connect();
+            btDevice = savedDevice;
+            
+            let found = false;
+            for (const uuid of PRINTER_SERVICES) {
+                try {
+                    const service = await server.getPrimaryService(uuid);
+                    const chars = await service.getCharacteristics();
+                    for (const char of chars) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            btCharacteristic = char;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                } catch(e) {}
+            }
+            
+            if (!found) {
+                const services = await server.getPrimaryServices();
+                for (const svc of services) {
+                    const chars = await svc.getCharacteristics();
+                    for (const char of chars) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            btCharacteristic = char;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+            }
+            
+            if (found) {
+                const name = localStorage.getItem('hotpotPrinterName') || 'Printer';
+                statusEl.innerHTML = '🟢 ' + name;
+                statusEl.className = 'text-xs bg-green-500 text-white px-2 py-1 rounded-full';
+                console.log('✅ Auto-reconnected to printer:', name);
+                
+                const rs = document.getElementById('receipt-printer-select');
+                const ks = document.getElementById('kitchen-printer-select');
+                if (rs) rs.innerHTML = `<option>${name}</option>`;
+                if (ks) ks.innerHTML = `<option>${name}</option>`;
+                
+                savedDevice.addEventListener('gattserverdisconnected', () => {
+                    statusEl.innerHTML = '🔴 Disconnected';
+                    statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
+                    btDevice = null;
+                    btCharacteristic = null;
+                });
+                return; // Successfully reconnected
+            }
+        }
+        // If we get here, device not found or no characteristic
+        statusEl.innerHTML = '🔵 Printer Off';
+        statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
+    } catch(e) {
+        console.log('Auto-reconnect failed — click Connect BT');
+        const statusEl = document.getElementById('bluetooth-status');
+        if (statusEl) {
+            statusEl.innerHTML = '🔵 Printer Off';
+            statusEl.className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
+        }
+    }
+}
 
 async function connectBluetooth() {
+    // Check Bluetooth + Location first
+    if (!await checkBluetoothReady()) return;
+    
     try {
         const statusEl = document.getElementById('bluetooth-status');
         statusEl.innerHTML = '🔵 Scanning...';
@@ -515,6 +617,11 @@ async function connectBluetooth() {
         
         const server = await device.gatt.connect();
         btDevice = device;
+        
+        // ✅ SAVE printer ID for auto-reconnect
+        savedPrinterId = device.id;
+        localStorage.setItem('hotpotPrinterId', device.id);
+        localStorage.setItem('hotpotPrinterName', device.name);
         
         let found = false;
         
@@ -558,8 +665,8 @@ async function connectBluetooth() {
         
         const receiptSelect = document.getElementById('receipt-printer-select');
         const kitchenSelect = document.getElementById('kitchen-printer-select');
-        if (receiptSelect) receiptSelect.innerHTML = `<option value="${device.name}">${device.name}</option>`;
-        if (kitchenSelect) kitchenSelect.innerHTML = `<option value="${device.name}">${device.name}</option>`;
+        if (receiptSelect) receiptSelect.innerHTML = `<option>${device.name}</option>`;
+        if (kitchenSelect) kitchenSelect.innerHTML = `<option>${device.name}</option>`;
         
         device.addEventListener('gattserverdisconnected', () => {
             statusEl.innerHTML = '🔴 Disconnected';
@@ -575,19 +682,22 @@ async function connectBluetooth() {
         document.getElementById('bluetooth-status').innerHTML = '🔵 Printer Off';
         document.getElementById('bluetooth-status').className = 'text-xs bg-red-500 px-2 py-1 rounded-full';
         
-        if (e.name === 'NotFoundError') alert('❌ No device selected.');
-        else if (e.name === 'SecurityError') alert('❌ Bluetooth permission denied.');
-        else alert('❌ Connection failed: ' + (e.message || 'Unknown error'));
+        if (e.name === 'NotFoundError') {
+            alert('❌ No device selected.\n\n📱 Android Users:\n1. Turn ON Bluetooth\n2. Turn ON Location/GPS\n3. Pair printer in Settings first\n4. Allow Location for Chrome');
+        } else if (e.name === 'SecurityError') {
+            alert('❌ Permission denied.\n\n📱 On Android:\nSettings → Apps → Chrome → Permissions → Allow Location');
+        } else {
+            alert('❌ Connection failed: ' + (e.message || 'Unknown error'));
+        }
     }
 }
-
 // ============================================
-// SEND RAW DATA TO PRINTER
+// SEND RAW DATA TO PRINTER (FAST VERSION)
 // ============================================
 async function sendToPrinter(text) {
     const encoder = new TextEncoder();
     const data = encoder.encode(text);
-    const CHUNK_SIZE = 256;
+    const CHUNK_SIZE = 512; // Bigger chunks = faster
     
     for (let i = 0; i < data.length; i += CHUNK_SIZE) {
         const chunk = data.slice(i, Math.min(i + CHUNK_SIZE, data.length));
@@ -598,142 +708,214 @@ async function sendToPrinter(text) {
                 await btCharacteristic.writeValue(chunk);
             }
         } catch(e) {
-            // Retry with smaller chunk
-            console.warn('Chunk failed, retrying byte-by-byte...');
-            for (let j = 0; j < chunk.length; j++) {
-                const single = chunk.slice(j, j + 1);
+            // Only retry on fail
+            for (let j = 0; j < chunk.length; j += 64) {
+                const mini = chunk.slice(j, Math.min(j + 64, chunk.length));
                 if (btCharacteristic.properties.writeWithoutResponse) {
-                    await btCharacteristic.writeValueWithoutResponse(single);
+                    await btCharacteristic.writeValueWithoutResponse(mini);
                 } else {
-                    await btCharacteristic.writeValue(single);
+                    await btCharacteristic.writeValue(mini);
                 }
-                await new Promise(r => setTimeout(r, 10));
             }
         }
+        // ⚡ Reduced delay from 50ms to 15ms
         if (i + CHUNK_SIZE < data.length) {
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 15));
         }
     }
 }
+// ============================================
+// SANITIZE TEXT HELPER (remove non-ASCII)
+// ============================================
+function sanitizeText(str) {
+    return str
+        .replace(/៛/g, 'R')
+        .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+        .replace(/[^\x00-\x7F\x0A\x0D]/g, '');
+}
 
-// ============================================
-// BUILD KITCHEN TICKET
-// ============================================
-function buildKitchenTicket(order) {
-    const line = '------------------------------';
-    let txt = '\x1B\x40'; // ESC @ - Initialize printer
-    txt += '\x1B\x61\x01'; // ESC a 1 - Center align
-    
-    txt += '\n🍲 KITCHEN ORDER 🍲\n';
-    txt += '*** HOTPOT ***\n\n';
-    
-    txt += '\x1B\x61\x00'; // ESC a 0 - Left align
-    txt += line + '\n';
-    txt += 'Table: ' + order.tableNum + '\n';
-    txt += 'Time: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '\n';
-    txt += 'Persons: ' + order.persons.length + '\n';
-    txt += line + '\n\n';
-    
-    // Bold for items
-    txt += '\x1B\x45\x01'; // ESC E 1 - Bold ON
-    
-    order.persons.forEach((p, i) => {
-        txt += '👤 P' + (i+1) + ': ' + p.noodle + '\n';
-        if (p.extraNoodle) txt += '   ➕ EXTRA NOODLE\n';
-        if (p.note) txt += '   📝 ' + p.note + '\n';
-        txt += '\n';
-    });
-    
-    if (order.extras && order.extras.length > 0) {
-        txt += '--- EXTRAS ---\n';
-        order.extras.forEach(e => {
-            txt += '  • ' + e.name + ' x' + (e.qty||1) + '\n';
-        });
-        txt += '\n';
-    }
-    
-    txt += '\x1B\x45\x00'; // ESC E 0 - Bold OFF
-    txt += line + '\n';
-    txt += '\x1B\x61\x01'; // Center
-    txt += 'PLEASE PREPARE ASAP!\n';
-    txt += line + '\n';
-    
-    // Cut paper
-    txt += '\n\n\n\n';
-    txt += '\x1D\x56\x41'; // GS V A - Full cut
-    
-    return txt;
+function padRight(str, len) {
+    str = String(str);
+    return str + ' '.repeat(Math.max(0, len - str.length));
+}
+
+function padLeft(str, len) {
+    str = String(str);
+    return ' '.repeat(Math.max(0, len - str.length)) + str;
 }
 
 // ============================================
-// BUILD RECEIPT TICKET
+// BUILD KITCHEN TICKET (Option B style)
 // ============================================
-function buildReceiptTicket(order) {
-    const line = '------------------------------';
-    let txt = '\x1B\x40'; // Initialize
-    txt += '\x1B\x61\x01'; // Center
+function buildKitchenTicket(order) {
+    const WIDTH = 32; // characters per line for 58mm printer
+    const line = '='.repeat(WIDTH);
+    const dash = '-'.repeat(WIDTH);
     
-    txt += '\n🍲 KOOJI Hotpot\n';
-    txt += 'Tel: 016 645 198\n';
+    let txt = '\x1B\x40'; // Initialize printer
+    txt += '\x1B\x61\x01'; // Center align
+    txt += '\x1B\x21\x10'; // Double height
+    
+    txt += '\n' + line + '\n';
+    txt += '   KITCHEN ORDER\n';
     txt += line + '\n';
     
+    txt += '\x1B\x21\x00'; // Normal size
     txt += '\x1B\x61\x00'; // Left align
-    txt += 'Table: ' + order.tableNum + '\n';
-    txt += 'Date: ' + new Date().toLocaleString() + '\n';
+    
+    txt += '\n';
+    txt += padRight('  TABLE: ' + order.tableNum, WIDTH/2);
+    txt += padLeft('TIME: ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), WIDTH/2) + '\n';
+    txt += '  PERSONS: ' + order.persons.length + '\n';
     txt += line + '\n\n';
     
-    // Persons breakdown
-    const BASE_PRICE = 8000;
-    const EXTRA_NOODLE_PRICE = 2000;
-    
+    // Persons
     order.persons.forEach((p, i) => {
-        txt += '👤 P' + (i+1) + ': ' + p.noodle + '\n';
-        txt += '   Base: 8,000៛\n';
-        if (p.extraNoodle) txt += '   +Extra Noodle: 2,000៛\n';
-        if (p.note) txt += '   📝 ' + p.note + '\n';
+        txt += '\x1B\x45\x01'; // Bold ON
+        txt += '  PERSON ' + (i+1) + '\n';
+        txt += '\x1B\x45\x00'; // Bold OFF
+        txt += '    Noodle : ' + p.noodle + '\n';
+        if (p.extraNoodle) txt += '    Extra  : + Extra Noodle\n';
+        if (p.note) txt += '    Note   : ' + sanitizeText(p.note) + '\n';
+        txt += '\n';
     });
     
     // Extras
     if (order.extras && order.extras.length > 0) {
-        txt += '\n--- Extras ---\n';
+        txt += dash + '\n';
+        txt += '  EXTRAS\n';
+        txt += dash + '\n';
         order.extras.forEach(e => {
-            const extTotal = e.price * (e.qty || 1);
-            txt += '  ' + e.name + ' x' + (e.qty||1) + ': ' + extTotal.toLocaleString() + '៛\n';
+            txt += '    * ' + e.name + ' x' + (e.qty||1) + '\n';
         });
+        txt += '\n';
     }
     
-    // Calculate totals
+    txt += '\x1B\x61\x01'; // Center
+    txt += '\x1B\x45\x01'; // Bold
+    txt += line + '\n';
+    txt += '  PLEASE PREPARE ASAP\n';
+    txt += line + '\n';
+    txt += '\x1B\x45\x00'; // Bold OFF
+    
+    txt += '\n\n\n\n';
+    txt += '\x1D\x56\x41'; // Full cut
+    
+    return sanitizeText(txt);
+}
+
+// ============================================
+// BUILD RECEIPT TICKET (Option B Premium)
+// ============================================
+function buildReceiptTicket(order) {
+    const WIDTH = 32;
+    const line = '='.repeat(WIDTH);
+    const dash = '-'.repeat(WIDTH);
+    const BASE_PRICE = 8000;
+    const EXTRA_NOODLE_PRICE = 2000;
+    
+    // Generate order number (daily counter)
+    const today = new Date().toDateString();
+    let orderNum = parseInt(localStorage.getItem('hotpotOrderNum') || '0');
+    if (localStorage.getItem('hotpotOrderDate') !== today) {
+        orderNum = 1;
+        localStorage.setItem('hotpotOrderDate', today);
+    } else {
+        orderNum++;
+    }
+    localStorage.setItem('hotpotOrderNum', orderNum);
+    const orderId = String(orderNum).padStart(3, '0');
+    
+    let txt = '\x1B\x40'; // Initialize
+    txt += '\x1B\x61\x01'; // Center align
+    
+    // Header
+    txt += '\x1B\x21\x10'; // Double height
+    txt += '\n' + line + '\n';
+    txt += '   KOOJI: The Hotpot\n';
+    txt += line + '\n';
+    txt += '\x1B\x21\x00'; // Normal size
+    
+    txt += '  015 64 51 98\n';
+    txt += '  Chrey, Battambang, KH\n';
+    txt += line + '\n\n';
+    
+    // Info section
+    txt += '\x1B\x61\x00'; // Left align
+    txt += '- Table No  : ' + order.tableNum + '\n';
+    txt += '- Date : ' + new Date().toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) + '\n';
+    txt += '- Order : ' + orderId + '\n';
+    txt += '- Time      : ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '\n';
+    txt += '- Payment : ' + (order.paymentMethod === 'cash' ? 'Cash' : 'Bank') + '\n';
+    txt += '- Persons   : ' + order.persons.length + '\n';
+    if (order.customer) txt += '- Customer  : ' + order.customer + '\n';
+    txt += line + '\n\n';
+    
+    // Order Details header
+    txt += '\x1B\x61\x01'; // Center
+    txt += '\x1B\x45\x01'; // Bold
+    txt += '  ORDER DETAILS\n';
+    txt += '\x1B\x45\x00'; // Bold OFF
+    txt += dash + '\n\n';
+    
+    // Person details
+    txt += '\x1B\x61\x00'; // Left align
+    order.persons.forEach((p, i) => {
+        txt += '\x1B\x45\x01'; // Bold
+        txt += '  Person ' + (i+1) + '\n';
+        txt += '\x1B\x45\x00'; // Bold OFF
+        txt += '    Noodle  : ' + p.noodle + '\n';
+        txt += '    Base    : ' + padLeft(BASE_PRICE.toLocaleString() + 'R', 12) + '\n';
+        if (p.extraNoodle) {
+            txt += '    Extra   : ' + padLeft(EXTRA_NOODLE_PRICE.toLocaleString() + 'R', 12) + '\n';
+        }
+        if (p.note) txt += '    Note    : ' + sanitizeText(p.note) + '\n';
+        txt += dash + '\n';
+    });
+    
+    // Extras
+    if (order.extras && order.extras.length > 0) {
+        txt += '\x1B\x61\x01'; // Center
+        txt += '  Extras\n';
+        txt += '\x1B\x61\x00'; // Left
+        txt += dash + '\n';
+        order.extras.forEach(e => {
+            const extTotal = e.price * (e.qty || 1);
+            txt += '    ' + e.name + ' x ' + (e.qty||1);
+            txt += padLeft(extTotal.toLocaleString() + 'R', WIDTH - 6 - e.name.length - 4) + '\n';
+        });
+        txt += dash + '\n';
+    }
+    
+    // Totals
     let personTotal = order.persons.length * BASE_PRICE;
     order.persons.forEach(p => { if (p.extraNoodle) personTotal += EXTRA_NOODLE_PRICE; });
     let extrasTotal = order.extras.reduce((s, e) => s + (e.price * (e.qty || 1)), 0);
     
-    txt += '\n' + line + '\n';
-    txt += 'Persons: ' + personTotal.toLocaleString() + '៛\n';
-    txt += 'Extras:  ' + extrasTotal.toLocaleString() + '៛\n';
-    
-    if (order.discount && order.discount > 0) {
-        txt += 'Discount: -' + order.discount.toLocaleString() + '៛\n';
-    }
+    txt += '\n';
+    txt += '\x1B\x61\x00'; // Left
+    txt += '  SUBTOTAL' + padLeft(personTotal.toLocaleString() + 'R', WIDTH - 10) + '\n';
+    txt += '  EXTRAS' + padLeft(extrasTotal.toLocaleString() + 'R', WIDTH - 8) + '\n';
+    txt += '\n';
     
     txt += '\x1B\x45\x01'; // Bold ON
-    txt += line + '\n';
-    txt += 'TOTAL: ' + order.total.toLocaleString() + '៛\n';
-    txt += line + '\n';
+    txt += '\x1B\x21\x10'; // Double height
+    txt += '  TOTAL' + padLeft(order.total.toLocaleString() + 'R', WIDTH - 7) + '\n';
+    txt += '\x1B\x21\x00'; // Normal
     txt += '\x1B\x45\x00'; // Bold OFF
     
+    // Footer
     txt += '\x1B\x61\x01'; // Center
-    if (order.customer) txt += 'Customer: ' + order.customer + '\n';
-    if (order.paymentMethod) {
-        txt += 'Payment: ' + (order.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Bank') + '\n';
-    }
-    txt += '\nTHANK YOU! 🍲\n';
-    txt += 'Please come again!\n';
+    txt += line + '\n';
+    txt += '     THANK YOU!\n';
+    txt += '  Please visit again :)\n';
+    txt += line + '\n';
+    txt += '  WiFi: koojiwifi#!\n';
     
-    // Cut
     txt += '\n\n\n\n';
     txt += '\x1D\x56\x41'; // Full cut
     
-    return txt;
+    return sanitizeText(txt);
 }
 
 // ============================================
@@ -758,7 +940,7 @@ async function printReceipt(order) {
         await sendToPrinter(kitchenTicket);
         
         // Small delay for paper feed
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 150));
         
         // 2️⃣ PRINT CUSTOMER RECEIPT
         const receiptTicket = buildReceiptTicket(order);
@@ -970,6 +1152,7 @@ setInterval(updateClock,1000);
 // ============================================
 document.addEventListener('DOMContentLoaded',()=>{
     updateClock(); updateUIForUser(); renderTableGrid(); renderDrinkButtons(); updateStats(); renderKitchen();
+    autoReconnectPrinter(); // ✅ Auto-reconnect saved printer
     console.log('🍲 KOOJI Hotpot POS Ready!');
 });
 </script>
