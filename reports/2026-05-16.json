@@ -1,0 +1,14 @@
+{
+  "date": "2026-05-16",
+  "revenue": 768275,
+  "totalOrders": 49,
+  "avgTicket": 15679,
+  "itemsSold": {
+    "noodles": {
+      "Khmer Noodle": 4
+    },
+    "drinks": {}
+  },
+  "topCustomers": [],
+  "timestamp": "2026-05-16T03:14:42.568Z"
+}
