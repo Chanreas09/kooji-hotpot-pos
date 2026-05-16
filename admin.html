@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>KOOJI - Daily Sales Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-red {
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+        }
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 800;
+        }
+        @media (min-width: 768px) {
+            .stat-number { font-size: 3.5rem; }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-in {
+            animation: slideUp 0.4s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="max-w-4xl mx-auto px-4 py-6 md:py-8">
+        
+        <!-- Header -->
+        <div class="gradient-red rounded-2xl p-6 mb-8 text-white shadow-xl animate-in">
+            <div class="flex items-center gap-3">
+                <div class="text-4xl">🍲</div>
+                <div>
+                    <h1 class="text-2xl font-bold">KOOJI Hotpot</h1>
+                    <p class="text-red-100 text-sm">Daily Sales Report</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Date Selector -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 animate-in">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">📅 Select Date</label>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="date" id="datePicker" class="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-red-400 focus:outline-none">
+                <button onclick="loadReport()" class="gradient-red text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition">
+                    🔍 View Report
+                </button>
+            </div>
+        </div>
+
+        <!-- Report Content -->
+        <div id="reportContent" class="animate-in">
+            <div class="text-center py-16 bg-white rounded-2xl shadow-lg">
+                <div class="text-6xl mb-4">📊</div>
+                <p class="text-gray-500">Select a date to view daily sales</p>
+            </div>
+        </div>
+
+        <!-- Available Reports -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mt-6 animate-in">
+            <div class="flex items-center gap-2 mb-4">
+                <span class="text-xl">📅</span>
+                <h2 class="font-bold text-gray-800">Available Reports</h2>
+            </div>
+            <div id="reportList" class="flex flex-wrap gap-2"></div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // GITHUB CONFIGURATION
+        // ============================================
+        const GITHUB_OWNER = 'Chanreas09';
+        const GITHUB_REPO = 'KOOJI-Hotpot-POS';
+        
+        async function loadReport() {
+            const date = document.getElementById('datePicker').value;
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('reportContent').innerHTML = `
+                <div class="text-center py-16 bg-white rounded-2xl shadow-lg">
+                    <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mb-4"></div>
+                    <p class="text-gray-500">Loading...</p>
+                </div>
+            `;
+            
+            const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/reports/${date}.json`;
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Report not found');
+                const report = await response.json();
+                displayReport(report);
+            } catch(e) {
+                document.getElementById('reportContent').innerHTML = `
+                    <div class="text-center py-16 bg-white rounded-2xl shadow-lg">
+                        <div class="text-6xl mb-4">📭</div>
+                        <p class="text-gray-500 text-lg">No report found for ${date}</p>
+                        <p class="text-gray-400 text-sm mt-2">Complete "End Day" on POS to generate report</p>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayReport(report) {
+            // Calculate total bowls
+            const totalBowls = Object.values(report.itemsSold.noodles).reduce((a, b) => a + b, 0);
+            
+            // Get day name
+            const dayName = new Date(report.date).toLocaleDateString('en-US', { weekday: 'long' });
+            
+            // Find best selling noodle
+            const topNoodle = Object.entries(report.itemsSold.noodles).sort((a, b) => b[1] - a[1])[0];
+            
+            const html = `
+                <!-- Date Header -->
+                <div class="bg-white rounded-2xl shadow-lg p-6 mb-6 text-center">
+                    <p class="text-red-500 text-sm font-semibold uppercase tracking-wide">SALES REPORT</p>
+                    <h2 class="text-3xl font-bold text-gray-800 mt-1">${report.date}</h2>
+                    <p class="text-gray-500 mt-1">${dayName}</p>
+                </div>
+                
+                <!-- MAIN STAT - TOTAL DAILY SALE (Big & Bold) -->
+                <div class="gradient-red rounded-2xl shadow-xl p-8 mb-6 text-center text-white">
+                    <p class="text-red-100 text-sm uppercase tracking-wide mb-2">Total Daily Sale</p>
+                    <p class="stat-number">៛${report.revenue.toLocaleString()}</p>
+                    <p class="text-red-100 text-sm mt-2">Cambodian Riel (KHR)</p>
+                </div>
+                
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-white rounded-xl shadow-lg p-4 text-center">
+                        <div class="text-3xl mb-2">📋</div>
+                        <p class="text-xs text-gray-500 uppercase">Orders</p>
+                        <p class="text-2xl font-bold text-gray-800">${report.totalOrders}</p>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-lg p-4 text-center">
+                        <div class="text-3xl mb-2">🍜</div>
+                        <p class="text-xs text-gray-500 uppercase">Total Bowls</p>
+                        <p class="text-2xl font-bold text-gray-800">${totalBowls}</p>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-lg p-4 text-center">
+                        <div class="text-3xl mb-2">⭐</div>
+                        <p class="text-xs text-gray-500 uppercase">Average per Bowl</p>
+                        <p class="text-xl font-bold text-gray-800">៛${Math.round(report.revenue / totalBowls || 0).toLocaleString()}</p>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-lg p-4 text-center">
+                        <div class="text-3xl mb-2">💰</div>
+                        <p class="text-xs text-gray-500 uppercase">Average per Order</p>
+                        <p class="text-xl font-bold text-gray-800">៛${report.avgTicket.toLocaleString()}</p>
+                    </div>
+                </div>
+                
+                <!-- Best Seller Highlight -->
+                ${topNoodle ? `
+                    <div class="bg-amber-50 rounded-2xl p-5 mb-6 border-2 border-amber-200 text-center">
+                        <div class="flex items-center justify-center gap-2 mb-2">
+                            <span class="text-2xl">🏆</span>
+                            <span class="text-amber-600 font-semibold">Best Selling Noodle</span>
+                        </div>
+                        <p class="text-2xl font-bold text-gray-800">${topNoodle[0]}</p>
+                        <p class="text-lg text-gray-600 mt-1">${topNoodle[1]} bowls sold</p>
+                        <p class="text-sm text-gray-500 mt-1">${Math.round(topNoodle[1] / totalBowls * 100)}% of total sales</p>
+                    </div>
+                ` : ''}
+                
+                <!-- Items Breakdown -->
+                <div class="bg-white rounded-2xl shadow-lg p-5">
+                    <h3 class="font-bold text-gray-800 mb-3">📋 Sales Breakdown</h3>
+                    
+                    <div class="mb-4">
+                        <p class="font-semibold text-gray-700 mb-2">🍜 Noodles</p>
+                        ${Object.entries(report.itemsSold.noodles).map(([name, count]) => `
+                            <div class="flex justify-between py-2 border-b">
+                                <span>${name}</span>
+                                <span class="font-semibold">${count} bowls</span>
+                            </div>
+                        `).join('') || '<p class="text-gray-400 text-sm">No data</p>'}
+                    </div>
+                    
+                    <div>
+                        <p class="font-semibold text-gray-700 mb-2">🥤 Drinks</p>
+                        ${Object.entries(report.itemsSold.drinks).map(([name, count]) => `
+                            <div class="flex justify-between py-2 border-b">
+                                <span>${name}</span>
+                                <span class="font-semibold">${count} sold</span>
+                            </div>
+                        `).join('') || '<p class="text-gray-400 text-sm">No data</p>'}
+                    </div>
+                </div>
+                
+                <!-- Top Customers -->
+                ${report.topCustomers && report.topCustomers.length > 0 ? `
+                    <div class="bg-white rounded-2xl shadow-lg p-5 mt-6">
+                        <h3 class="font-bold text-gray-800 mb-3">👥 Top Customers Today</h3>
+                        ${report.topCustomers.map((c, i) => `
+                            <div class="flex justify-between items-center py-2 border-b">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center text-xs font-bold">${i+1}</span>
+                                    <span>${c.name}</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-sm text-gray-500">${c.visits} visits</span>
+                                    <span class="ml-2 font-semibold text-green-600">៛${c.spent.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            `;
+            
+            document.getElementById('reportContent').innerHTML = html;
+        }
+        
+        async function loadReportList() {
+            const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/reports`;
+            
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('No reports found');
+                const files = await response.json();
+                
+                const listDiv = document.getElementById('reportList');
+                const sortedFiles = files.sort((a, b) => b.name.localeCompare(a.name));
+                
+                listDiv.innerHTML = sortedFiles.map(file => {
+                    const date = file.name.replace('.json', '');
+                    return `
+                        <button onclick="document.getElementById('datePicker').value='${date}'; loadReport();" 
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm transition">
+                            📄 ${date}
+                        </button>
+                    `;
+                }).join('');
+                
+                if (files.length === 0) {
+                    listDiv.innerHTML = '<p class="text-gray-500 text-sm">No reports yet. Click "End Day" on POS.</p>';
+                }
+            } catch(e) {
+                console.error('Error:', e);
+            }
+        }
+        
+        // Set today's date and load
+        document.getElementById('datePicker').value = new Date().toISOString().split('T')[0];
+        loadReportList();
+    </script>
+</body>
+</html>
